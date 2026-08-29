@@ -1,6 +1,0 @@
-# Combined-repository ignores; backend-specific rules live in its subfolder.
-.idea/
-target/
-HELP.md
-personal-gemini-journal-frontend/node_modules/
-personal-gemini-journal-frontend/.next/
