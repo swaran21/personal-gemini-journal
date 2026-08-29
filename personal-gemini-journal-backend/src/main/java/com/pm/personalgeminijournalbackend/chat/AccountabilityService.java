@@ -1,5 +1,6 @@
 package com.pm.personalgeminijournalbackend.chat;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
+import com.pm.personalgeminijournalbackend.gemini.GeminiService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -12,9 +13,11 @@ import java.util.List;
 public class AccountabilityService {
     private static final Logger log = LoggerFactory.getLogger(AccountabilityService.class);
     private final JournalRepository repository;
-    public AccountabilityService(JournalRepository repository) { this.repository = repository; }
+    private final GeminiService gemini;
+    public AccountabilityService(JournalRepository repository, GeminiService gemini) { this.repository = repository; this.gemini = gemini; }
     @Async("accountabilityExecutor")
-    public void persist(String uid, List<String> goals, Instant createdAt) {
+    public void extractAndPersist(String uid, String entry, Instant createdAt) {
+        List<String> goals = gemini.extractActionItems(entry);
         if (goals.isEmpty()) return;
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {

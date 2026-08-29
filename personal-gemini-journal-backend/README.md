@@ -1,6 +1,8 @@
 # Personal Gemini Journal API
 
-Spring Boot 3 API for Firebase-authenticated journaling on Cloud Run. `POST /api/chat` requires `Authorization: Bearer <Firebase ID token>` and body `{"entry":"..."}`. It returns `{"reply":"...","extractedGoal":"..."}`; the first goal is returned immediately and all extracted goals are persisted asynchronously.
+Spring Boot 3 API for Firebase-authenticated journaling on Cloud Run. `POST /api/chat` requires `Authorization: Bearer <Firebase ID token>` and body `{"entry":"..."}`. It returns `{"reply":"...","extractedGoal":null}` while actionable goals are extracted and persisted asynchronously.
+
+`POST /api/chat/rag` accepts `{"question":"..."}` and answers using cosine-ranked embeddings from only the caller's own journal entries. It returns the reply plus referenced entry IDs and similarity scores. New journal entries save a Gemini embedding under `users/{uid}/journal_entries`; action-item extraction runs asynchronously after the entry is saved and can be read from `GET /api/action-items`.
 
 The frontend should use authenticated API calls rather than the Firestore Web SDK: `GET /api/journal-entries`, `GET /api/action-items`, `PATCH /api/action-items/{id}` with `{"completed":true}`, and `DELETE /api/action-items/{id}`. Each endpoint uses the JWT UID, never a client-supplied UID.
 

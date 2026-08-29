@@ -12,4 +12,7 @@ public class ChatController {
     @PostMapping public ResponseEntity<ChatResponse> chat(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody ChatRequest request) {
         return ResponseEntity.ok(chatService.process(principal.uid(), request.entry()));
     }
+    @PostMapping("/rag") public ResponseEntity<RagChatResponse> chatWithPastSelf(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody RagChatRequest request) {
+        return ResponseEntity.ok(chatService.chatWithPastSelf(principal.uid(), request.question()));
+    }
 }

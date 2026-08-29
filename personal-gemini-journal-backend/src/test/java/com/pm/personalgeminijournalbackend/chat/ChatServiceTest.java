@@ -1,6 +1,7 @@
 package com.pm.personalgeminijournalbackend.chat;
 import com.pm.personalgeminijournalbackend.gemini.*;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
+import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
@@ -9,9 +10,18 @@ import static org.mockito.Mockito.*;
 
 class ChatServiceTest {
  @Test void scopesHistoryAndSavesResultUnderAuthenticatedUid() {
-  GeminiService gemini = mock(GeminiService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityService accountability = mock(AccountabilityService.class);
-  when(repo.recentEntries("uid-1", 10)).thenReturn(List.of()); when(gemini.reflect(eq("Plan my run"), anyList())).thenReturn(new GeminiResult("That sounds achievable.", List.of("Run 5 km"))); when(gemini.embed("Plan my run")).thenReturn(List.of(0.1, 0.2));
-  ChatResponse result = new ChatService(gemini, repo, accountability).process("uid-1", " Plan my run ");
-  assertEquals("Run 5 km", result.extractedGoal()); verify(repo).saveEntry(eq("uid-1"), eq("Plan my run"), anyString(), anyList(), any()); verify(accountability).persist(eq("uid-1"), eq(List.of("Run 5 km")), any()); verify(repo, never()).recentEntries(eq("other-user"), anyInt());
+  GeminiService gemini = mock(GeminiService.class); GeminiEmbeddingService embeddings = mock(GeminiEmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityService accountability = mock(AccountabilityService.class);
+  when(repo.recentEntries("uid-1", 10)).thenReturn(List.of()); when(gemini.reflect(eq("Plan my run"), anyList())).thenReturn(new GeminiResult("That sounds achievable.", List.of())); when(embeddings.embed("Plan my run")).thenReturn(List.of(0.1, 0.2));
+  ChatResponse result = new ChatService(gemini, embeddings, repo, accountability).process("uid-1", " Plan my run ");
+  assertNull(result.extractedGoal()); verify(repo).saveEntry(eq("uid-1"), eq("Plan my run"), anyString(), anyList(), any()); verify(accountability).extractAndPersist(eq("uid-1"), eq("Plan my run"), any()); verify(repo, never()).recentEntries(eq("other-user"), anyInt());
+ }
+
+ @Test void ragRetrievalIsScopedToAuthenticatedUser() {
+  GeminiService gemini = mock(GeminiService.class); GeminiEmbeddingService embeddings = mock(GeminiEmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityService accountability = mock(AccountabilityService.class);
+  JournalEntry entry = new JournalEntry("entry-1", "I enjoyed a morning run", "Nice work", java.time.Instant.now(), List.of(0.1, 0.2));
+  GeminiEmbeddingService.RetrievedEntry match = new GeminiEmbeddingService.RetrievedEntry(entry, 0.91);
+  when(embeddings.embed("What helped my running habit?")).thenReturn(List.of(0.1, 0.2)); when(repo.entriesWithEmbeddings("uid-1", 100)).thenReturn(List.of(entry)); when(embeddings.mostRelevant(anyList(), anyList(), eq(5))).thenReturn(List.of(match)); when(gemini.answerWithGrounding(eq("What helped my running habit?"), anyList())).thenReturn("Your past entry points to morning runs.");
+  RagChatResponse response = new ChatService(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "What helped my running habit?");
+  assertEquals("entry-1", response.references().get(0).entryId()); verify(repo, never()).entriesWithEmbeddings(eq("other-user"), anyInt());
  }
 }

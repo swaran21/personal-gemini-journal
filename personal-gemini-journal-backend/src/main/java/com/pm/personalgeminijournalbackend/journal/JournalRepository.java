@@ -34,6 +34,16 @@ public class JournalRepository {
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
           catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
+    /** Retrieves only the authenticated user's recent vectors; ranking is performed by the service. */
+    public List<JournalEntry> entriesWithEmbeddings(String uid, int maxResults) {
+        try {
+            return entries(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(maxResults).get().get().getDocuments().stream().map(d ->
+                    new JournalEntry(d.getId(), d.getString("text"), d.getString("response"),
+                            Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)), embedding(d.get("embedding"))))
+                    .toList();
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
+        catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
+    }
     public List<JournalEntry> listEntries(String uid) { return recentEntries(uid, 100); }
     public List<ActionItem> listActionItems(String uid) {
         try {
@@ -45,5 +55,9 @@ public class JournalRepository {
     public void setActionItemCompleted(String uid, String id, boolean completed) { wait(actionItems(uid).document(validId(id)).update("completed", completed)); }
     public void deleteActionItem(String uid, String id) { wait(actionItems(uid).document(validId(id)).delete()); }
     private String validId(String id) { if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("Invalid document id"); return id; }
+    private List<Double> embedding(Object value) {
+        if (!(value instanceof List<?> values)) return List.of();
+        return values.stream().filter(Number.class::isInstance).map(Number.class::cast).map(Number::doubleValue).toList();
+    }
     private void wait(com.google.api.core.ApiFuture<?> future) { try { future.get(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); } catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); } }
 }
