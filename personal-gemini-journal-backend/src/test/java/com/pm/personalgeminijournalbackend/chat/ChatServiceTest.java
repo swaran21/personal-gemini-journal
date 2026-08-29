@@ -22,6 +22,6 @@ class ChatServiceTest {
   GeminiEmbeddingService.RetrievedEntry match = new GeminiEmbeddingService.RetrievedEntry(entry, 0.91);
   when(embeddings.embed("What helped my running habit?")).thenReturn(List.of(0.1, 0.2)); when(repo.entriesWithEmbeddings("uid-1", 100)).thenReturn(List.of(entry)); when(embeddings.mostRelevant(anyList(), anyList(), eq(5))).thenReturn(List.of(match)); when(gemini.answerWithGrounding(eq("What helped my running habit?"), anyList())).thenReturn("Your past entry points to morning runs.");
   RagChatResponse response = new ChatService(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "What helped my running habit?");
-  assertEquals("entry-1", response.references().get(0).entryId()); verify(repo, never()).entriesWithEmbeddings(eq("other-user"), anyInt());
+  assertEquals("entry-1", response.referencedEntries().get(0)); verify(repo, never()).entriesWithEmbeddings(eq("other-user"), anyInt());
  }
 }

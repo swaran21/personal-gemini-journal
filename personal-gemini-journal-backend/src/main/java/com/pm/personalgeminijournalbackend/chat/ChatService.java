@@ -4,6 +4,7 @@ import com.pm.personalgeminijournalbackend.gemini.GeminiResult;
 import com.pm.personalgeminijournalbackend.gemini.GeminiService;
 import com.pm.personalgeminijournalbackend.gemini.GeminiEmbeddingService;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
+import com.pm.personalgeminijournalbackend.journal.JournalEntryResponse;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
@@ -13,19 +14,23 @@ public class ChatService {
     private final GeminiService gemini; private final GeminiEmbeddingService embeddings; private final JournalRepository journalRepository; private final AccountabilityService accountability;
     public ChatService(GeminiService gemini, GeminiEmbeddingService embeddings, JournalRepository journalRepository, AccountabilityService accountability) { this.gemini = gemini; this.embeddings = embeddings; this.journalRepository = journalRepository; this.accountability = accountability; }
     public ChatResponse process(String uid, String rawEntry) {
+        JournalEntryResponse result = processJournalEntry(uid, rawEntry);
+        return new ChatResponse(result.aiResponse(), result.extractedGoal());
+    }
+    public JournalEntryResponse processJournalEntry(String uid, String rawEntry) {
         String entry = sanitize(rawEntry);
         GeminiResult result = gemini.reflect(entry, journalRepository.recentEntries(uid, 10));
         Instant now = Instant.now();
-        journalRepository.saveEntry(uid, entry, result.reply(), embeddings.embed(entry), now);
+        String id = journalRepository.saveEntry(uid, entry, result.reply(), embeddings.embed(entry), now);
         accountability.extractAndPersist(uid, entry, now);
-        return new ChatResponse(result.reply(), null);
+        return new JournalEntryResponse(id, entry, result.reply(), null, now);
     }
     public RagChatResponse chatWithPastSelf(String uid, String rawQuestion) {
         String question = sanitize(rawQuestion);
         var matches = embeddings.mostRelevant(embeddings.embed(question), journalRepository.entriesWithEmbeddings(uid, 100), 5);
         var entries = matches.stream().map(GeminiEmbeddingService.RetrievedEntry::entry).toList();
         String reply = gemini.answerWithGrounding(question, entries);
-        var references = matches.stream().map(match -> new RagChatResponse.Reference(match.entry().id(), match.entry().createdAt(), match.score())).toList();
+        var references = matches.stream().map(match -> match.entry().id()).toList();
         return new RagChatResponse(reply, references);
     }
     private String sanitize(String value) {

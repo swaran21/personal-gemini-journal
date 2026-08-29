@@ -13,8 +13,12 @@ public class JournalController {
     private final JournalRepository repository;
     public JournalController(JournalRepository repository) { this.repository = repository; }
     @GetMapping("/journal-entries") public List<JournalEntry> entries(@AuthenticationPrincipal FirebasePrincipal p) { return repository.listEntries(p.uid()); }
-    @GetMapping("/action-items") public List<ActionItem> actionItems(@AuthenticationPrincipal FirebasePrincipal p) { return repository.listActionItems(p.uid()); }
-    @PatchMapping("/action-items/{id}") public ResponseEntity<Void> update(@AuthenticationPrincipal FirebasePrincipal p, @PathVariable String id, @RequestBody @NotNull CompletionRequest body) { repository.setActionItemCompleted(p.uid(), id, body.completed()); return ResponseEntity.noContent().build(); }
+    @GetMapping("/action-items") public List<ActionItemResponse> actionItems(@AuthenticationPrincipal FirebasePrincipal p) { return repository.listActionItems(p.uid()).stream().map(item -> new ActionItemResponse(item.id(), item.text(), item.completed() ? "COMPLETED" : "PENDING", item.createdAt())).toList(); }
+    @PatchMapping("/action-items/{id}") public ResponseEntity<Void> update(@AuthenticationPrincipal FirebasePrincipal p, @PathVariable String id, @RequestBody @NotNull CompletionRequest body) { repository.setActionItemCompleted(p.uid(), id, "COMPLETED".equals(body.status())); return ResponseEntity.noContent().build(); }
     @DeleteMapping("/action-items/{id}") public ResponseEntity<Void> delete(@AuthenticationPrincipal FirebasePrincipal p, @PathVariable String id) { repository.deleteActionItem(p.uid(), id); return ResponseEntity.noContent().build(); }
-    public record CompletionRequest(boolean completed) { }
+    public record CompletionRequest(String status) {
+        public CompletionRequest {
+            if (!"PENDING".equals(status) && !"COMPLETED".equals(status)) throw new IllegalArgumentException("status must be PENDING or COMPLETED");
+        }
+    }
 }
