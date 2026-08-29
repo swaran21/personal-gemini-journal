@@ -52,8 +52,8 @@ public class JournalRepository {
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
-    public void setActionItemCompleted(String uid, String id, boolean completed) { wait(actionItems(uid).document(validId(id)).update("completed", completed)); }
-    public void deleteActionItem(String uid, String id) { wait(actionItems(uid).document(validId(id)).delete()); }
+    public void setActionItemCompleted(String uid, String id, boolean completed) { String validId = validId(id); wait(actionItems(uid).document(validId).update("completed", completed)); }
+    public void deleteActionItem(String uid, String id) { String validId = validId(id); wait(actionItems(uid).document(validId).delete()); }
     private String validId(String id) { if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("Invalid document id"); return id; }
     private List<Double> embedding(Object value) {
         if (!(value instanceof List<?> values)) return List.of();
