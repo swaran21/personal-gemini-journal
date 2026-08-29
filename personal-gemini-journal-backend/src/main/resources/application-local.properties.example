@@ -2,7 +2,12 @@
 spring.config.activate.on-profile=local
 
 # Full Secret Manager version resource, e.g. projects/your-project/secrets/GEMINI_API_KEY/versions/latest
-GEMINI_API_KEY_SECRET=
+# Do not place a raw Gemini API key in this file.
+GEMINI_API_KEY_SECRET=projects/gen-lang-client-01681294/secrets/GEMINI_API_KEY/versions/latest
+
+# Non-secret Google Cloud identifiers used by the server-side Admin SDK.
+GOOGLE_CLOUD_PROJECT=gen-lang-client-01681294
+FIRESTORE_DATABASE_ID=ai-studio-a422305-80c0-fd2cb2cd09f0
 
 # Comma-separated browser origins allowed to call this API.
 CORS_ALLOWED_ORIGINS=http://localhost:3000
