@@ -14,4 +14,6 @@ Gemini keys are read at runtime from Secret Manager. Set `GEMINI_API_KEY_SECRET=
 
 Use application default credentials locally (`gcloud auth application-default login`), set `GEMINI_API_KEY_SECRET`, then run `./mvnw spring-boot:run`. Build with `./mvnw clean package`, then `docker build --progress=plain -t journal-api .`.
 
+For local properties, copy `src/main/resources/application-local.properties.example` to `src/main/resources/application-local.properties`, fill in the Secret Manager resource name, and start with `--spring.profiles.active=local`. The real file is ignored by Git and the application never accepts a raw Gemini API key.
+
 For Cloud Run, deploy with a dedicated service account and set only non-secret configuration such as `CORS_ALLOWED_ORIGINS=https://your-frontend.example` and `GEMINI_API_KEY_SECRET=projects/.../versions/latest`. Cloud Run provides `PORT`; Spring Boot will honor it when `SERVER_PORT=$PORT` is supplied at deployment. Health check: `/actuator/health`.
