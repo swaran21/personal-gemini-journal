@@ -30,9 +30,15 @@ public class ChatService {
         var matches = embeddings.mostRelevant(embeddings.embed(question), journalRepository.entriesWithEmbeddings(uid, 100), 5);
         var entries = matches.stream().map(GeminiEmbeddingService.RetrievedEntry::entry).toList();
         String reply = gemini.answerWithGrounding(question, entries);
-        var references = matches.stream().map(match -> match.entry().id()).toList();
+        var references = matches.stream().map(match -> excerpt(match.entry().text())).toList();
         return new RagChatResponse(reply, references);
     }
+
+    private String excerpt(String text) {
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 497) + "...";
+    }
+
     private String sanitize(String value) {
         String result = value.replace("\u0000", "").trim();
         if (result.isBlank()) throw new IllegalArgumentException("Entry must contain non-whitespace text");

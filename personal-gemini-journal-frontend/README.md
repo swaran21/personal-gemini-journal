@@ -14,7 +14,7 @@ The composer accepts up to 10,000 characters and sends `{ "content": "..." }` to
 
 ### Chat with Past Self
 
-The RAG view sends `{ "query": "..." }` to `/api/chat/rag`. User messages and grounded responses appear in a conversation. Referenced entry IDs are hidden behind a collapsible “Referenced memories” control.
+The RAG view sends `{ "query": "..." }` to `/api/chat/rag`. User messages and grounded responses appear in a conversation. Bounded excerpts from the referenced private memories are hidden behind a collapsible “Referenced memories” control.
 
 ### Accountability Dashboard
 

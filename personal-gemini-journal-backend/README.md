@@ -61,7 +61,7 @@ users/{uid}/action_items/{actionItemId}
 
 ### Chat with Past Self
 
-`POST /api/chat/rag` accepts `query` (legacy `question` is also accepted). The query is embedded, private entries are loaded from the caller's collection, cosine similarity ranks candidates, and the best bounded matches are sent as grounding context to Gemini. The result includes the answer and referenced entry IDs.
+`POST /api/chat/rag` accepts `query` (legacy `question` is also accepted). The query is embedded, private entries are loaded from the caller's collection, cosine similarity ranks candidates, and the best bounded matches are sent as grounding context to Gemini. The result includes the answer and bounded excerpts from those referenced entries.
 
 ### Accountability agent
 

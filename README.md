@@ -61,7 +61,7 @@ Every application request requires `Authorization: Bearer <Firebase ID token>`.
 | DELETE | `/api/action-items/{id}` | — | Delete an owned goal |
 | GET | `/actuator/health` | — | Health/readiness check |
 
-Responses use ISO-8601 timestamps. RAG returns `reply` and referenced entry IDs; action items use `PENDING` or `COMPLETED`.
+Responses use ISO-8601 timestamps. RAG returns `reply` and bounded referenced-entry excerpts; action items use `PENDING` or `COMPLETED`.
 
 ## Data isolation
 

@@ -8,16 +8,29 @@ import { auth, googleProvider } from './firebase';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
-async function api(user, path, options = {}) {
-  const token = await user.getIdToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...options.headers,
-    },
-  });
+async function api(path, options = {}) {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('Your session has expired. Please sign in again.');
+
+  const request = async (forceRefresh = false) => {
+    const token = await currentUser.getIdToken(forceRefresh);
+    return fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...options.headers,
+      },
+    });
+  };
+
+  let response = await request();
+  if (response.status === 401) response = await request(true);
+  if (response.status === 401 || response.status === 403) {
+    await signOut(auth);
+    throw new Error('Your secure session has expired. Please sign in again.');
+  }
+
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || body.error || `Request failed (${response.status})`);
@@ -49,8 +62,8 @@ export default function App() {
     setLoading(true);
     try {
       const [journalEntries, goals] = await Promise.all([
-        api(currentUser, '/api/journal/entries'),
-        api(currentUser, '/api/action-items'),
+        api('/api/journal/entries'),
+        api('/api/action-items'),
       ]);
       setEntries(journalEntries);
       setActionItems(goals);
@@ -112,7 +125,7 @@ function LoginScreen() {
 function JournalView({ user, entries, setEntries, items, setItems, loading, setError }) {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const submit = async (event) => { event.preventDefault(); const value = content.trim(); if (!value || submitting) return; setSubmitting(true); setError(''); try { const created = await api(user, '/api/journal/entry', { method: 'POST', body: JSON.stringify({ content: value }) }); setEntries((current) => [created, ...current]); setContent(''); } catch (requestError) { setError(requestError.message); } finally { setSubmitting(false); } };
+  const submit = async (event) => { event.preventDefault(); const value = content.trim(); if (!value || submitting) return; setSubmitting(true); setError(''); try { const created = await api('/api/journal/entry', { method: 'POST', body: JSON.stringify({ content: value }) }); setEntries((current) => [created, ...current]); setContent(''); } catch (requestError) { setError(requestError.message); } finally { setSubmitting(false); } };
   return <div className="flex flex-col items-start gap-8 lg:flex-row lg:gap-12">
     <div className="flex w-full flex-1 flex-col gap-8">
       <section className="rounded-3xl border border-[#E8E6E0] bg-white/50 p-6 backdrop-blur-sm sm:p-8"><h2 className="mb-4 flex items-center gap-2 text-[13px] font-bold uppercase tracking-[.2em] text-[#7A8D80]"><Sparkles className="h-4 w-4" />What&apos;s on your mind?</h2><form onSubmit={submit} className="relative"><textarea value={content} onChange={(event) => setContent(event.target.value)} maxLength={10000} required className="min-h-[140px] w-full resize-y rounded-2xl border border-[#DCDCD2] bg-white px-6 py-5 pb-16 text-[15px] leading-relaxed text-[#2D362E] placeholder:text-[#9A968D] focus:ring-2 focus:ring-[#7A8D80]/20" placeholder="Write your thoughts here... Gemini will respond with empathy and extract actionable goals for you." /><button type="submit" disabled={submitting || !content.trim()} className="absolute bottom-4 right-4 grid h-11 w-11 place-items-center rounded-xl bg-[#7A8D80] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Save entry">{submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}</button></form><p className="mt-4 text-center text-[10px] uppercase tracking-widest text-[#9A968D]">Your authenticated private journal</p></section>
@@ -133,11 +146,11 @@ function InsightsAside({ user, items, setItems, setError }) {
 
 function RagView({ user, setError }) {
   const [query, setQuery] = useState(''); const [messages, setMessages] = useState([]); const [asking, setAsking] = useState(false);
-  const ask = async (event) => { event.preventDefault(); const value = query.trim(); if (!value || asking) return; setAsking(true); setError(''); setMessages((current) => [...current, { role: 'user', text: value }]); setQuery(''); try { const result = await api(user, '/api/chat/rag', { method: 'POST', body: JSON.stringify({ query: value }) }); setMessages((current) => [...current, { role: 'assistant', ...result }]); } catch (requestError) { setMessages((current) => current.slice(0, -1)); setError(requestError.message); } finally { setAsking(false); } };
+  const ask = async (event) => { event.preventDefault(); const value = query.trim(); if (!value || asking) return; setAsking(true); setError(''); setMessages((current) => [...current, { role: 'user', text: value }]); setQuery(''); try { const result = await api('/api/chat/rag', { method: 'POST', body: JSON.stringify({ query: value }) }); setMessages((current) => [...current, { role: 'assistant', ...result }]); } catch (requestError) { setMessages((current) => current.slice(0, -1)); setError(requestError.message); } finally { setAsking(false); } };
   return <section className="mx-auto flex min-h-[600px] max-w-4xl flex-col overflow-hidden rounded-3xl border border-[#E8E6E0] bg-white/60"><div className="border-b border-[#E8E6E0] p-6 sm:p-8"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#E8EBE8] text-[#7A8D80]"><MessageCircleHeart className="h-5 w-5" /></div><div><h2 className="font-serif text-2xl font-semibold">Chat with Past Self</h2><p className="mt-1 text-sm text-[#9A968D]">Grounded only in your own private reflections.</p></div></div></div><div className="flex-1 space-y-5 p-5 sm:p-8">{!messages.length && <EmptyState icon={<MessageCircleHeart className="h-7 w-7" />} title="Ask your past self" description="Try: When did I feel most productive last week?" />}{messages.map((message, index) => message.role === 'user' ? <div key={index} className="ml-auto max-w-[85%] rounded-2xl rounded-tr-none bg-[#7A8D80] px-5 py-4 text-[15px] leading-relaxed text-white">{message.text}</div> : <RagReply key={index} message={message} />)}{asking && <div className="flex items-center gap-2 text-sm text-[#9A968D]"><Loader2 className="h-4 w-4 animate-spin" />Searching your memories...</div>}</div><form onSubmit={ask} className="border-t border-[#E8E6E0] p-4 sm:p-5"><div className="flex gap-3"><input value={query} onChange={(event) => setQuery(event.target.value)} maxLength={4000} className="min-w-0 flex-1 rounded-xl border border-[#DCDCD2] bg-white px-4 py-3 text-sm placeholder:text-[#9A968D]" placeholder="Ask about a memory, habit, or feeling..." /><button disabled={asking || !query.trim()} className="grid h-11 w-11 place-items-center rounded-xl bg-[#7A8D80] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Ask past self"><Send className="h-4 w-4" /></button></div></form></section>;
 }
 
-function RagReply({ message }) { const [open, setOpen] = useState(false); return <div className="max-w-[92%] rounded-2xl rounded-tl-none border border-[#E8E6E0] bg-white p-5 text-[15px] leading-relaxed text-[#3A3A35]"><div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.16em] text-[#7A8D80]"><Bot className="h-3.5 w-3.5" />Past Self</div><p className="whitespace-pre-wrap">{message.reply}</p>{message.referencedEntries?.length > 0 && <div className="mt-4 border-t border-[#E8E6E0] pt-3"><button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between text-xs font-medium text-[#7A8D80]">Referenced memories <span className="flex items-center gap-1">{message.referencedEntries.length}{open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span></button>{open && <ul className="mt-3 space-y-2">{message.referencedEntries.map((reference) => <li key={reference} className="rounded-lg bg-[#F9F8F4] px-3 py-2 text-xs text-[#7A756C]">Memory {reference}</li>)}</ul>}</div>}</div>; }
+function RagReply({ message }) { const [open, setOpen] = useState(false); return <div className="max-w-[92%] rounded-2xl rounded-tl-none border border-[#E8E6E0] bg-white p-5 text-[15px] leading-relaxed text-[#3A3A35]"><div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.16em] text-[#7A8D80]"><Bot className="h-3.5 w-3.5" />Past Self</div><p className="whitespace-pre-wrap">{message.reply}</p>{message.referencedEntries?.length > 0 && <div className="mt-4 border-t border-[#E8E6E0] pt-3"><button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between text-xs font-medium text-[#7A8D80]">Referenced memories <span className="flex items-center gap-1">{message.referencedEntries.length}{open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span></button>{open && <ul className="mt-3 space-y-2">{message.referencedEntries.map((reference, index) => <li key={`${index}-${reference}`} className="whitespace-pre-wrap rounded-lg bg-[#F9F8F4] px-3 py-2 text-xs leading-relaxed text-[#7A756C]">{reference}</li>)}</ul>}</div>}</div>; }
 
 function AccountabilityView({ user, items, setItems, loading, setError }) {
   const completed = items.filter((item) => item.status === 'COMPLETED').length;
@@ -147,8 +160,8 @@ function AccountabilityView({ user, items, setItems, loading, setError }) {
 
 function GoalList({ user, items, setItems, setError, compact = false }) {
   const [updating, setUpdating] = useState(new Set());
-  const toggle = async (item) => { if (updating.has(item.id)) return; const before = item.status; const status = before === 'COMPLETED' ? 'PENDING' : 'COMPLETED'; setUpdating((current) => new Set(current).add(item.id)); setItems((current) => current.map((value) => value.id === item.id ? { ...value, status } : value)); try { await api(user, `/api/action-items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); } catch (requestError) { setItems((current) => current.map((value) => value.id === item.id ? { ...value, status: before } : value)); setError(requestError.message); } finally { setUpdating((current) => { const next = new Set(current); next.delete(item.id); return next; }); } };
-  const remove = async (event, id) => { event.stopPropagation(); const removed = items.find((item) => item.id === id); setItems((current) => current.filter((item) => item.id !== id)); try { await api(user, `/api/action-items/${id}`, { method: 'DELETE' }); } catch (requestError) { if (removed) setItems((current) => [...current, removed]); setError(requestError.message); } };
+  const toggle = async (item) => { if (updating.has(item.id)) return; const before = item.status; const status = before === 'COMPLETED' ? 'PENDING' : 'COMPLETED'; setUpdating((current) => new Set(current).add(item.id)); setItems((current) => current.map((value) => value.id === item.id ? { ...value, status } : value)); try { await api(`/api/action-items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); } catch (requestError) { setItems((current) => current.map((value) => value.id === item.id ? { ...value, status: before } : value)); setError(requestError.message); } finally { setUpdating((current) => { const next = new Set(current); next.delete(item.id); return next; }); } };
+  const remove = async (event, id) => { event.stopPropagation(); const removed = items.find((item) => item.id === id); setItems((current) => current.filter((item) => item.id !== id)); try { await api(`/api/action-items/${id}`, { method: 'DELETE' }); } catch (requestError) { if (removed) setItems((current) => [...current, removed]); setError(requestError.message); } };
   if (!items.length) return <p className="rounded-3xl border border-dashed border-[#DCDCD2] bg-white py-8 text-center text-[13px] text-[#9A968D]">No action items yet.<br />Gemini will automatically extract goals from your entries.</p>;
   return <div className={`flex flex-col ${compact ? 'gap-4' : 'gap-5'}`}>{items.map((item) => <button key={item.id} onClick={() => toggle(item)} className={`group relative flex w-full items-start gap-3 overflow-hidden rounded-3xl border p-5 text-left shadow-sm transition-all ${item.status === 'COMPLETED' ? 'border-[#E8E6E0] bg-[#F9F8F4] opacity-70' : 'border-[#DCDCD2] bg-white'}`}><span className="mt-0.5 text-[#9A968D]">{updating.has(item.id) ? <Loader2 className="h-5 w-5 animate-spin" /> : item.status === 'COMPLETED' ? <CheckCircle2 className="h-5 w-5 text-[#7A8D80]" /> : <Circle className="h-5 w-5" />}</span>{item.status === 'PENDING' && <span className="absolute left-0 top-0 h-full w-1 bg-[#B87D64]" />}<span className="flex-1"><span className={`block text-[11px] font-bold uppercase tracking-wider ${item.status === 'COMPLETED' ? 'text-[#9A968D]' : 'text-[#B87D64]'}`}>{item.status === 'COMPLETED' ? 'Completed' : 'Action Item'}</span><span className={`mt-1 block text-[14px] font-medium leading-snug ${item.status === 'COMPLETED' ? 'text-[#9A968D] line-through' : 'text-[#2D362E]'}`}>{item.goal}</span></span><span onClick={(event) => remove(event, item.id)} className="rounded-full p-2 text-[#9A968D] opacity-0 transition-opacity hover:bg-[#F9F8F4] hover:text-red-500 group-hover:opacity-100" role="button" aria-label={`Delete ${item.goal}`}><Trash2 className="h-4 w-4" /></span></button>)}</div>;
 }
