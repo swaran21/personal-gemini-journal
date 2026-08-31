@@ -1,8 +1,8 @@
 package com.pm.personalgeminijournalbackend.chat;
 
 import com.pm.personalgeminijournalbackend.gemini.GeminiResult;
-import com.pm.personalgeminijournalbackend.gemini.GeminiService;
-import com.pm.personalgeminijournalbackend.gemini.GeminiEmbeddingService;
+import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
+import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import com.pm.personalgeminijournalbackend.journal.JournalEntryResponse;
 import org.springframework.stereotype.Service;
@@ -11,8 +11,8 @@ import java.util.List;
 
 @Service
 public class ChatService {
-    private final GeminiService gemini; private final GeminiEmbeddingService embeddings; private final JournalRepository journalRepository; private final AccountabilityService accountability;
-    public ChatService(GeminiService gemini, GeminiEmbeddingService embeddings, JournalRepository journalRepository, AccountabilityService accountability) { this.gemini = gemini; this.embeddings = embeddings; this.journalRepository = journalRepository; this.accountability = accountability; }
+    private final GenerativeAiService gemini; private final EmbeddingService embeddings; private final JournalRepository journalRepository; private final AccountabilityDispatcher accountability;
+    public ChatService(GenerativeAiService gemini, EmbeddingService embeddings, JournalRepository journalRepository, AccountabilityDispatcher accountability) { this.gemini = gemini; this.embeddings = embeddings; this.journalRepository = journalRepository; this.accountability = accountability; }
     public ChatResponse process(String uid, String rawEntry) {
         JournalEntryResponse result = processJournalEntry(uid, rawEntry);
         return new ChatResponse(result.aiResponse(), result.extractedGoal());
@@ -22,15 +22,14 @@ public class ChatService {
         GeminiResult result = gemini.reflect(entry, journalRepository.recentEntries(uid, 10));
         Instant now = Instant.now();
         String id = journalRepository.saveEntry(uid, entry, result.reply(), embeddings.embed(entry), now);
-        accountability.extractAndPersist(uid, entry, now);
+        accountability.dispatch(uid, id, entry, now);
         return new JournalEntryResponse(id, entry, result.reply(), null, now);
     }
     public RagChatResponse chatWithPastSelf(String uid, String rawQuestion) {
         String question = sanitize(rawQuestion);
-        var matches = embeddings.mostRelevant(embeddings.embed(question), journalRepository.entriesWithEmbeddings(uid, 100), 5);
-        var entries = matches.stream().map(GeminiEmbeddingService.RetrievedEntry::entry).toList();
+        var entries = journalRepository.findRelevant(uid, embeddings.embed(question), 5);
         String reply = gemini.answerWithGrounding(question, entries);
-        var references = matches.stream().map(match -> excerpt(match.entry().text())).toList();
+        var references = entries.stream().map(entry -> excerpt(entry.text())).toList();
         return new RagChatResponse(reply, references);
     }
 

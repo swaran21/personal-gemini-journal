@@ -1,8 +1,9 @@
 package com.pm.personalgeminijournalbackend.chat;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
-import com.pm.personalgeminijournalbackend.gemini.GeminiService;
+import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.time.Instant;
@@ -10,13 +11,14 @@ import java.util.List;
 
 /** Persists extracted goals off the request thread after the entry is durable. */
 @Service
-public class AccountabilityService {
+@Profile("cloud")
+public class AccountabilityService implements AccountabilityDispatcher {
     private static final Logger log = LoggerFactory.getLogger(AccountabilityService.class);
     private final JournalRepository repository;
-    private final GeminiService gemini;
-    public AccountabilityService(JournalRepository repository, GeminiService gemini) { this.repository = repository; this.gemini = gemini; }
+    private final GenerativeAiService gemini;
+    public AccountabilityService(JournalRepository repository, GenerativeAiService gemini) { this.repository = repository; this.gemini = gemini; }
     @Async("accountabilityExecutor")
-    public void extractAndPersist(String uid, String entry, Instant createdAt) {
+    public void dispatch(String uid, String entryId, String entry, Instant createdAt) {
         List<String> goals = gemini.extractActionItems(entry);
         if (goals.isEmpty()) return;
         for (int attempt = 1; attempt <= 3; attempt++) {

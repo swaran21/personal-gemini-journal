@@ -1,44 +1,19 @@
 package com.pm.personalgeminijournalbackend.config;
 
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.FirestoreOptions;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
-import org.springframework.web.client.RestClient;
-
-import java.io.IOException;
 
 @Configuration
 @EnableAsync
+@EnableScheduling
 public class ApplicationConfig {
-    @Bean
-    FirebaseAuth firebaseAuth(GoogleCloudProperties cloudProperties) throws IOException {
-        if (FirebaseApp.getApps().isEmpty()) {
-            FirebaseOptions.Builder options = FirebaseOptions.builder().setCredentials(GoogleCredentials.getApplicationDefault());
-            if (cloudProperties.getProjectId() != null && !cloudProperties.getProjectId().isBlank()) options.setProjectId(cloudProperties.getProjectId());
-            FirebaseApp.initializeApp(options.build());
-        }
-        return FirebaseAuth.getInstance();
-    }
-
-    @Bean Firestore firestore(GoogleCloudProperties cloudProperties) throws IOException {
-        FirestoreOptions.Builder options = FirestoreOptions.newBuilder().setCredentials(GoogleCredentials.getApplicationDefault());
-        if (cloudProperties.getProjectId() != null && !cloudProperties.getProjectId().isBlank()) options.setProjectId(cloudProperties.getProjectId());
-        if (cloudProperties.getFirestoreDatabaseId() != null && !cloudProperties.getFirestoreDatabaseId().isBlank()) options.setDatabaseId(cloudProperties.getFirestoreDatabaseId());
-        return options.build().getService();
-    }
-    @Bean SecretManagerServiceClient secretManagerServiceClient() throws IOException { return SecretManagerServiceClient.create(); }
-    @Bean RestClient geminiRestClient(RestClient.Builder builder) { return builder.baseUrl("https://generativelanguage.googleapis.com").build(); }
     @Bean @ConfigurationProperties(prefix = "app.gemini") GeminiProperties geminiProperties() { return new GeminiProperties(); }
+    @Bean @ConfigurationProperties(prefix = "app.ollama") OllamaProperties ollamaProperties() { return new OllamaProperties(); }
     @Bean @ConfigurationProperties(prefix = "app.cors") CorsProperties corsProperties() { return new CorsProperties(); }
     @Bean @ConfigurationProperties(prefix = "app.google-cloud") GoogleCloudProperties googleCloudProperties() { return new GoogleCloudProperties(); }
     @Bean(name = "accountabilityExecutor")
@@ -53,6 +28,13 @@ public class ApplicationConfig {
         public String getApiKeySecret() { return apiKeySecret; } public void setApiKeySecret(String v) { apiKeySecret = v; }
         public String getModel() { return model; } public void setModel(String v) { model = v; }
         public String getEmbeddingModel() { return embeddingModel; } public void setEmbeddingModel(String v) { embeddingModel = v; }
+    }
+    public static class OllamaProperties {
+        private String baseUrl = "http://localhost:11434"; private String chatModel = "gemma3:1b"; private String embeddingModel = "nomic-embed-text"; private int embeddingDimensions = 768;
+        public String getBaseUrl() { return baseUrl; } public void setBaseUrl(String v) { baseUrl = v; }
+        public String getChatModel() { return chatModel; } public void setChatModel(String v) { chatModel = v; }
+        public String getEmbeddingModel() { return embeddingModel; } public void setEmbeddingModel(String v) { embeddingModel = v; }
+        public int getEmbeddingDimensions() { return embeddingDimensions; } public void setEmbeddingDimensions(int v) { embeddingDimensions = v; }
     }
     public static class CorsProperties { private String allowedOrigins = ""; public String getAllowedOrigins() { return allowedOrigins; } public void setAllowedOrigins(String v) { allowedOrigins = v; } }
     public static class GoogleCloudProperties {

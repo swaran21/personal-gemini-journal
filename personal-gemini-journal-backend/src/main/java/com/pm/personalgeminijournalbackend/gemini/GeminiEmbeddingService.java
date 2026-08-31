@@ -6,6 +6,7 @@ import com.pm.personalgeminijournalbackend.config.GeminiSecretProvider;
 import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
@@ -15,7 +16,8 @@ import java.util.Map;
 
 /** Generates Gemini embeddings and performs bounded in-memory similarity ranking for one user's entries. */
 @Service
-public class GeminiEmbeddingService {
+@Profile("cloud")
+public class GeminiEmbeddingService implements EmbeddingService {
     private static final int MAX_CANDIDATES = 100;
     private final RestClient client;
     private final GeminiSecretProvider secrets;
@@ -26,12 +28,13 @@ public class GeminiEmbeddingService {
     }
 
     public List<Double> embed(String text) {
-        JsonNode response = client.post().uri(uri -> uri.path("/v1beta/models/{model}:embedContent")
-                        .queryParam("key", secrets.apiKey()).build(properties.getEmbeddingModel()))
+        JsonNode response = client.post().uri("/v1beta/models/{model}:embedContent", properties.getEmbeddingModel())
+                .header("x-goog-api-key", secrets.apiKey())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("model", "models/" + properties.getEmbeddingModel(), "content", Map.of("parts", List.of(Map.of("text", text)))))
                 .retrieve().body(JsonNode.class);
         List<Double> values = new ArrayList<>();
+        if (response == null) throw new IllegalStateException("Gemini returned no embedding response");
         for (JsonNode node : response.path("embedding").path("values")) values.add(node.asDouble());
         if (values.isEmpty()) throw new IllegalStateException("Gemini returned no embedding");
         return List.copyOf(values);

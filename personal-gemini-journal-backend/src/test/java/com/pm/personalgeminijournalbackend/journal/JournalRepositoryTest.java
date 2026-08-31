@@ -11,7 +11,7 @@ import static org.mockito.Mockito.*;
 
 class JournalRepositoryTest {
     private final Firestore firestore = mock(Firestore.class);
-    private final JournalRepository repository = new JournalRepository(firestore);
+    private final JournalRepository repository = new FirestoreJournalRepository(firestore);
 
     @Test void emptyActionItemBatchDoesNotTouchFirestore() {
         repository.saveActionItems("uid", List.of(), Instant.EPOCH);

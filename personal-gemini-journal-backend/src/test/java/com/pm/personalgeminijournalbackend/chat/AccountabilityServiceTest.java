@@ -16,27 +16,27 @@ class AccountabilityServiceTest {
 
     @Test void doesNotWriteWhenGeminiFindsNoGoals() {
         when(gemini.extractActionItems("reflection")).thenReturn(List.of());
-        service.extractAndPersist("uid", "reflection", Instant.EPOCH);
+        service.dispatch("uid", "entry-id", "reflection", Instant.EPOCH);
         verifyNoInteractions(repository);
     }
 
     @Test void persistsGoalsUnderTheSuppliedUid() {
         when(gemini.extractActionItems("reflection")).thenReturn(List.of("Finish portfolio"));
-        service.extractAndPersist("uid-1", "reflection", Instant.EPOCH);
+        service.dispatch("uid-1", "entry-id", "reflection", Instant.EPOCH);
         verify(repository).saveActionItems("uid-1", List.of("Finish portfolio"), Instant.EPOCH);
     }
 
     @Test void retriesPersistenceThenSucceeds() {
         when(gemini.extractActionItems("reflection")).thenReturn(List.of("Finish portfolio"));
         doThrow(new IllegalStateException("temporary")).doNothing().when(repository).saveActionItems(eq("uid"), anyList(), eq(Instant.EPOCH));
-        service.extractAndPersist("uid", "reflection", Instant.EPOCH);
+        service.dispatch("uid", "entry-id", "reflection", Instant.EPOCH);
         verify(repository, times(2)).saveActionItems("uid", List.of("Finish portfolio"), Instant.EPOCH);
     }
 
     @Test void stopsAfterThreePersistenceFailures() {
         when(gemini.extractActionItems("reflection")).thenReturn(List.of("Finish portfolio"));
         doThrow(new IllegalStateException("down")).when(repository).saveActionItems(eq("uid"), anyList(), eq(Instant.EPOCH));
-        service.extractAndPersist("uid", "reflection", Instant.EPOCH);
+        service.dispatch("uid", "entry-id", "reflection", Instant.EPOCH);
         verify(repository, times(3)).saveActionItems("uid", List.of("Finish portfolio"), Instant.EPOCH);
     }
 }

@@ -1,0 +1,61 @@
+package com.pm.personalgeminijournalbackend.chat;
+
+import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
+import com.pm.personalgeminijournalbackend.journal.JournalRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.List;
+
+/** Processes the local transactional outbox with bounded retries and idempotent action-item writes. */
+@Service
+@Profile("local")
+public class LocalAccountabilityWorker {
+    private static final Logger log = LoggerFactory.getLogger(LocalAccountabilityWorker.class);
+    private final LocalAccountabilityOutboxRepository outbox;
+    private final JournalRepository journalRepository;
+    private final GenerativeAiService ai;
+    private final int batchSize;
+    private final int maxAttempts;
+
+    public LocalAccountabilityWorker(
+            LocalAccountabilityOutboxRepository outbox,
+            JournalRepository journalRepository,
+            GenerativeAiService ai,
+            @Value("${app.accountability.batch-size:5}") int batchSize,
+            @Value("${app.accountability.max-attempts:5}") int maxAttempts) {
+        this.outbox = outbox;
+        this.journalRepository = journalRepository;
+        this.ai = ai;
+        this.batchSize = Math.max(1, Math.min(batchSize, 25));
+        this.maxAttempts = Math.max(1, Math.min(maxAttempts, 10));
+    }
+
+    @Scheduled(
+            initialDelayString = "${app.accountability.initial-delay-ms:2000}",
+            fixedDelayString = "${app.accountability.poll-delay-ms:2000}")
+    public void processAvailable() {
+        for (int index = 0; index < batchSize; index++) {
+            var claimed = outbox.claimNext();
+            if (claimed.isEmpty()) return;
+            process(claimed.orElseThrow());
+        }
+    }
+
+    void process(LocalAccountabilityOutboxRepository.Job job) {
+        try {
+            String entry = outbox.entryContent(job);
+            List<String> goals = ai.extractActionItems(entry);
+            journalRepository.saveActionItems(job.uid(), job.entryId().toString(), goals, Instant.now());
+            outbox.markSucceeded(job);
+        } catch (RuntimeException failure) {
+            log.warn("Local accountability job {} failed on attempt {}", job.id(), job.attempt(), failure);
+            outbox.markFailed(job, failure, maxAttempts);
+        }
+    }
+}
