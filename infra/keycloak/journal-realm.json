@@ -1,0 +1,39 @@
+{
+  "realm": "journal",
+  "enabled": true,
+  "displayName": "Personal Gemini Journal Local",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "rememberMe": false,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "passwordPolicy": "length(12) and digits(1) and lowerCase(1) and upperCase(1)",
+  "clients": [
+    {
+      "clientId": "journal-web",
+      "name": "Journal Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": ["http://localhost:13000/*", "http://localhost:3000/*", "http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:13000", "http://localhost:3000", "http://localhost:5173"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "protocolMappers": [
+        {
+          "name": "journal-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "journal-web",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}
