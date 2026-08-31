@@ -4,7 +4,7 @@ import { api } from '../../api/client';
 import { EntryCard } from './EntryCard';
 import { InsightsAside } from '../actions/InsightsAside';
 
-export function JournalView({ entries, setEntries, items, setItems, loading, setError }) {
+export function JournalView({ entries, setEntries, items, setItems, refreshItems, loading, setError }) {
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const submit = async (event) => {
@@ -17,6 +17,7 @@ export function JournalView({ entries, setEntries, items, setItems, loading, set
       const created = await api('/api/journal/entry', { method: 'POST', body: JSON.stringify({ content: value }) });
       setEntries((current) => [created, ...current]);
       setContent('');
+      void refreshItems();
     } catch (requestError) {
       setError(requestError.message);
     } finally {

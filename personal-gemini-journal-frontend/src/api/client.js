@@ -1,15 +1,11 @@
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import { authProvider } from '../auth/authProvider';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
 
-/** Sends an authenticated request and refreshes an expired Firebase token once. */
+/** Sends an authenticated request and refreshes an expired OIDC/Firebase token once. */
 export async function api(path, options = {}) {
-  const currentUser = auth.currentUser;
-  if (!currentUser) throw new Error('Your session has expired. Please sign in again.');
-
   const request = async (forceRefresh = false) => {
-    const token = await currentUser.getIdToken(forceRefresh);
+    const token = await authProvider.getAccessToken(forceRefresh);
     return fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
@@ -23,7 +19,7 @@ export async function api(path, options = {}) {
   let response = await request();
   if (response.status === 401) response = await request(true);
   if (response.status === 401 || response.status === 403) {
-    await signOut(auth);
+    await authProvider.logout();
     throw new Error('Your secure session has expired. Please sign in again.');
   }
   if (!response.ok) {
