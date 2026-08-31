@@ -1,86 +1,97 @@
 # Personal Gemini Journal Frontend
 
-React/Vite client for private journaling, Gemini reflection, “Chat with Past Self,” and accountability tracking. The UI preserves the original calm visual language: warm off-white surfaces, sage actions, rounded cards, journal bubbles, and an Extracted Insights panel.
+React 18/Vite client for daily reflection, private RAG, and accountability tracking. The component structure preserves the original warm off-white/sage journal design while separating authentication, API access, layout, journal, RAG, and goal features.
 
-## Features
+## Stack
 
-### Authentication
-
-Unauthenticated visitors see a Google sign-in card. Firebase Authentication handles the sign-in flow. Authenticated users see their avatar/email, a secure-session indicator, and sign-out control.
-
-### Daily Journal
-
-The composer accepts up to 10,000 characters and sends `{ "content": "..." }` to the backend. A loading state displays “Gemini is reflecting...” while the entry is processed. The feed renders the user's text, Gemini's response, timestamps, and an extracted-goal badge when available. The original-style sidebar lists action items.
-
-### Chat with Past Self
-
-The RAG view sends `{ "query": "..." }` to `/api/chat/rag`. User messages and grounded responses appear in a conversation. Bounded excerpts from the referenced private memories are hidden behind a collapsible “Referenced memories” control.
-
-### Accountability Dashboard
-
-The dashboard calculates completion percentage, displays a progress bar, groups action items by status, and supports optimistic checkbox updates. Failed requests roll back the UI and show a dismissible error. Items can also be deleted.
+- React 18.
+- Vite 8.
+- Tailwind CSS 3.
+- Lucide React icons.
+- Keycloak JS for local OIDC Authorization Code + PKCE.
+- Firebase Web SDK for cloud Google Sign-In.
+- Unprivileged Nginx production container.
 
 ## Source structure
 
 ```text
 src/
-├── App.jsx       Auth guard, views, API calls, and application state
-├── firebase.js   Firebase Web SDK configuration
-├── main.jsx      React entry point
-└── styles.css    Tailwind directives and global light theme
+|-- api/client.js                 Authenticated fetch/refresh/error policy
+|-- auth/
+|   |-- authProvider.js           Profile selection
+|   |-- keycloakProvider.js       Local OIDC provider
+|   `-- firebaseProvider.js       Cloud Firebase provider
+|-- components/
+|   |-- auth/                     Login guard
+|   |-- layout/                   Header and view tabs
+|   |-- journal/                  Composer and entry feed
+|   |-- rag/                      Past-self conversation and references
+|   |-- accountability/           Dashboard/progress
+|   |-- actions/                  Reusable goal controls
+|   `-- common/                   Loader, error, and empty states
+|-- App.jsx                       Authenticated state and view orchestration
+|-- firebase.js                   Lazily loaded public Firebase config
+`-- styles.css                    Tailwind/global design tokens
 ```
 
-## Requirements
+## Authentication behavior
 
-- Node.js 18 or newer
-- npm
-- Firebase Web App with Google provider enabled
-- `localhost` in Firebase Authentication authorized domains
-- Spring Boot backend running on port 8080, or a configured API origin
+`VITE_AUTH_MODE=oidc` dynamically loads Keycloak. Tokens remain inside the provider instance, Authorization Code flow uses PKCE S256, silent iframe checking is disabled, and expiry triggers refresh/logout handling.
 
-## Environment setup
+`VITE_AUTH_MODE=firebase` dynamically loads Firebase only in cloud builds. Every API call obtains `auth.currentUser.getIdToken(forceRefresh)`; no token is stored in React state or local storage by application code.
 
-Copy `.env.example` to `.env.local` and fill in the Firebase Web App values:
+The shared API client:
 
-| Variable | Purpose |
-|---|---|
-| `VITE_API_BASE_URL` | Backend origin; defaults to `http://localhost:8080` |
-| `VITE_FIREBASE_API_KEY` | Firebase browser API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project identifier |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
-| `VITE_FIREBASE_APP_ID` | Firebase Web App ID |
+1. Retrieves a current access token for every request.
+2. Adds `Authorization: Bearer <token>`.
+3. Adds JSON content type only when a body exists.
+4. Retries once with forced refresh after `401`.
+5. Signs out and returns a visible session error after persistent `401/403`.
+6. Parses sanitized backend Problem Details.
 
-Firebase Web configuration identifies the browser application, but it is not a replacement for server credentials. Never add Gemini keys, service-account JSON, or Secret Manager credentials to `.env.local`; Vite embeds `VITE_*` values into browser assets.
+The frontend never sends a UID.
 
-## Install and run
+## Views
 
-Run `npm ci` for a clean lockfile installation, then `npm run dev`. Vite serves the application at `http://localhost:3000`, matching the backend development CORS default. Use `npm run build` for a production bundle and `npm run preview` to serve that bundle locally.
+### Daily Journal
 
-## API and token behavior
+The textarea is capped at 10,000 characters and preserves the draft after failure. The submit control shows a spinner while the model reflects. Saved entries and AI responses render as text bubbles. The sidebar displays action items using the original visual format.
 
-Before every fetch, the client calls `user.getIdToken()` and sends `Authorization: Bearer <token>`. It never sends a UID; the backend derives ownership from the verified token.
+### Chat with Past Self
 
-| UI action | Request |
-|---|---|
-| Save entry | `POST /api/journal/entry` with `{content}` |
-| Load entries | `GET /api/journal/entries` |
-| Ask past self | `POST /api/chat/rag` with `{query}` |
-| Load goals | `GET /api/action-items` |
-| Toggle goal | `PATCH /api/action-items/{id}` with `{status}` |
-| Delete goal | `DELETE /api/action-items/{id}` |
+Queries `/api/chat/rag`, renders a conversational response, and exposes bounded `referencedEntries` through a collapsible context list. Model content is rendered as text, not HTML.
 
-The client renders API values as text, formats ISO-8601 timestamps with the browser locale, limits input lengths, and turns request failures into visible error banners.
+### Accountability Dashboard
 
-## Responsive behavior
+Loads `/api/action-items`, computes completion percentage, and toggles status optimistically. A failed patch restores the prior state. Delete uses the same optimistic/rollback behavior.
 
-On large screens, the journal feed and composer occupy the primary column while Extracted Insights stays sticky on the right. On small screens the layout becomes one column, tabs scroll horizontally, profile details condense, and controls remain keyboard accessible.
+## Environment
 
-## Troubleshooting
+Copy `.env.example` to `.env.local` for Vite development. Local defaults are:
 
-- **Missing Firebase configuration:** copy `.env.example` to `.env.local` and fill every required value. `src/firebase.js` reports missing names early.
-- **401 Unauthorized:** confirm the frontend and backend use the same Firebase project and sign in again.
-- **CORS failure:** use port 3000 locally or configure backend `CORS_ALLOWED_ORIGINS` for the deployed frontend origin.
-- **Network failure:** start the backend on port 8080 or set `VITE_API_BASE_URL`.
-- **Goals appear later:** extraction runs asynchronously after an entry is saved; revisit the Accountability tab after Gemini completes.
+```text
+VITE_API_BASE_URL=http://localhost:18080
+VITE_AUTH_MODE=oidc
+VITE_OIDC_URL=http://localhost:8180
+VITE_OIDC_REALM=journal
+VITE_OIDC_CLIENT_ID=journal-web
+```
+
+Firebase variables are required only for cloud mode. They are public browser-app identifiers, not server credentials. Never create a `VITE_GEMINI_API_KEY`, `VITE_SERVICE_ACCOUNT`, or other private `VITE_*` setting because Vite embeds it in downloadable JavaScript.
+
+## Run and verify
+
+```powershell
+npm ci
+npm audit
+npm run dev
+npm run build
+```
+
+Vite serves on port `3000`; the Dockerized unprivileged Nginx frontend is exposed by the root Compose file on `13000`.
+
+## Browser security
+
+The production container sends a restrictive Content Security Policy, denies framing, prevents MIME sniffing, limits referrer data, and disables camera/microphone/geolocation permissions. It binds to a non-privileged internal port and runs as UID `101`.
+
+Cloud deployment must rebuild CSP/connect targets for the HTTPS frontend/backend/Firebase origins and should add HSTS only on the final HTTPS hostname.

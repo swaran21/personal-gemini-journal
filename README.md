@@ -1,91 +1,187 @@
 # Personal Gemini Journal
 
-Personal Gemini Journal is a private reflection and accountability application. Signed-in users write entries, receive empathetic Gemini reflections, search their own history with retrieval-augmented generation (RAG), and track commitments extracted from their writing.
+Personal Gemini Journal is a private reflection, memory retrieval, and accountability application. A signed-in user can write a journal entry, receive an empathetic AI response, ask questions grounded in their own earlier entries, and track goals extracted from their writing.
+
+The repository is deliberately local-first during the build phase. It runs without Google Cloud credentials or billing by using Keycloak, PostgreSQL with pgvector, and Ollama. The same application exposes a `cloud` Spring profile for the planned Firebase Authentication, Firestore, Gemini, Secret Manager, and Cloud Run deployment.
+
+## Aim
+
+The project demonstrates that useful AI features do not require weakening ownership boundaries. Identity is established by a verified signed token, the backend derives the owner identifier from that token, and persistence adapters scope every data operation to that identifier. The browser never chooses a UID, receives an AI credential, or accesses the server database directly.
+
+## Main capabilities
+
+- Authenticated personal journal with empathetic AI reflection.
+- Multi-turn context from the caller's recent entries.
+- Vector embeddings stored with every entry.
+- "Chat with Past Self" using private similarity retrieval and grounded generation.
+- Durable local accountability outbox with retry and idempotent goal writes.
+- Pending/completed accountability dashboard with optimistic UI updates.
+- Local and cloud adapters behind the same application ports.
+- Responsive warm journal UI, secure session handling, CSP, and container health checks.
 
 ## Repository layout
 
 ```text
 personal-gemini-journal/
-├── personal-gemini-journal-backend/   Spring Boot 3 REST API
-└── personal-gemini-journal-frontend/  React 18 + Vite web client
+|-- personal-gemini-journal-backend/   Spring Boot REST API
+|-- personal-gemini-journal-frontend/  React/Vite web application
+|-- infra/
+|   |-- keycloak/                      Local OIDC realm import
+|   `-- postgres/                      Non-superuser database bootstrap
+|-- scripts/local-smoke.ps1            Authenticated end-to-end smoke test
+|-- docs/                              Architecture, security, and migration guides
+|-- docker-compose.yml                 Complete local environment
+`-- .env.example                       Local environment template
 ```
 
-## Aim
-
-The application makes personal data useful without mixing users' data. Firebase Authentication establishes identity, the backend derives the UID from a verified token, and every Firestore operation is created below that UID. Gemini provides reflection and goal extraction; embeddings enable questions about the user's own past.
-
-## Capabilities
-
-- Google sign-in through Firebase Authentication.
-- Validated journal entry creation with an empathetic Gemini response.
-- Gemini embeddings saved beside each journal entry.
-- “Chat with Past Self” grounded in cosine-ranked private memories.
-- Asynchronous accountability extraction into user-owned action items.
-- Pending/completed action tracking with optimistic UI updates.
-- Responsive warm interface based on the original design.
-
-## Architecture
+## Architecture at a glance
 
 ```text
-React/Vite browser
-  │ Firebase sign-in → Firebase ID token
-  │ Authorization: Bearer <token>
-  ▼
-FirebaseAuthenticationFilter
-  │ verifies token and creates FirebasePrincipal(uid)
-  ▼
-Controllers → application services → Firestore/Gemini adapters
-                              ├─ users/{uid}/journal_entries
-                              └─ users/{uid}/action_items
+Browser (React)
+  | Authorization Code + PKCE
+  v
+Keycloak (local) / Firebase Auth (cloud)
+  | short-lived signed bearer token
+  v
+Spring Security -> FirebasePrincipal(subject/uid)
+  |
+  +-> ChatService -> GenerativeAiService -> Ollama / Gemini
+  |              `-> EmbeddingService ----> Ollama / Gemini Embeddings
+  |
+  `-> JournalRepository -> PostgreSQL + pgvector / Firestore
+                           `-> users are isolated by UID and RLS/path ownership
 ```
 
-The browser never sends a UID and never sends a Gemini key. Gemini credentials are resolved from Google Cloud Secret Manager at runtime.
+Spring profiles select adapters:
 
-## Technology
+| Concern | `local` profile | `cloud` profile |
+|---|---|---|
+| Authentication | Keycloak OIDC JWT | Firebase ID token verification |
+| Persistence | PostgreSQL 16 + pgvector | Cloud Firestore |
+| AI | Ollama `gemma3:1b` | Gemini `gemini-2.5-flash` |
+| Embeddings | Ollama `nomic-embed-text` | Gemini Embedding API |
+| Secrets | Ignored `.env.local` | Google Secret Manager + workload identity |
+| Accountability | Transactional outbox worker | Spring `@Async` post-save extraction |
 
-Backend: Java 17, Spring Boot 3.4.8, Spring Web/Security/Validation/Actuator, Firebase Admin SDK, Google Cloud Firestore, Google Cloud Secret Manager, Gemini REST calls through `RestClient`, and Maven Wrapper.
+Detailed flows are in [Architecture](docs/ARCHITECTURE.md) and [Security](docs/SECURITY.md).
 
-Frontend: React 18, Vite 5, Tailwind CSS 3, Firebase Web SDK 12, and Lucide React.
+## Local prerequisites
+
+- Docker Desktop with Linux containers enabled.
+- PowerShell 7 or Windows PowerShell 5.1.
+- At least 4 GB of free Docker memory and roughly 2 GB of free disk space for the first model/image pull.
+- JDK 17+ and Node.js 22+ only when running services outside Docker.
+
+No Firebase project, Google Cloud credentials, Gemini key, or billing account is required for the local profile.
+
+## Quick start
+
+From the repository root:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Edit `.env.local` and assign strong local values to these three blank settings:
+
+```text
+POSTGRES_PASSWORD=
+DB_ADMIN_PASSWORD=
+KEYCLOAK_ADMIN_PASSWORD=
+```
+
+Start the stack:
+
+```powershell
+docker compose --env-file .env.local up -d --build
+docker compose --env-file .env.local ps
+```
+
+The first start downloads the local chat and embedding models and can take several minutes. Healthy services are available at:
+
+| Service | URL/port |
+|---|---|
+| Frontend | `http://localhost:13000` |
+| Backend health | `http://localhost:18080/actuator/health` |
+| Keycloak | `http://localhost:8180` |
+| PostgreSQL | `localhost:55432` |
+| Ollama | `http://localhost:11434` |
+
+Open `http://localhost:13000`, choose **Sign in securely**, register a local account, and sign in. Keycloak uses Authorization Code flow with mandatory PKCE; implicit flow and password grant remain disabled.
+
+Run the automated authenticated smoke test:
+
+```powershell
+& .\scripts\local-smoke.ps1
+```
+
+The script creates disposable local users, submits a journal entry, performs RAG, waits for outbox-created action items, toggles status, checks a second user cannot see or modify the first user's data, and restores Keycloak's secure client settings in a `finally` block.
+
+Stop containers without deleting journal data:
+
+```powershell
+docker compose --env-file .env.local down
+```
+
+Deleting named volumes permanently removes local accounts, entries, models, and database state:
+
+```powershell
+docker compose --env-file .env.local down --volumes
+```
 
 ## API contract
 
-Every application request requires `Authorization: Bearer <Firebase ID token>`.
+All application routes require `Authorization: Bearer <access_token>`.
 
-| Method | Endpoint | Body | Purpose |
+| Method | Endpoint | Request | Response/purpose |
 |---|---|---|---|
-| POST | `/api/journal/entry` | `{ "content": "..." }` | Save, reflect, and embed an entry |
-| GET | `/api/journal/entries` | — | List the caller's entries |
-| POST | `/api/chat/rag` | `{ "query": "..." }` | Query private memories |
-| GET | `/api/action-items` | — | List the caller's goals |
-| PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" }` | Change goal status |
-| DELETE | `/api/action-items/{id}` | — | Delete an owned goal |
-| GET | `/actuator/health` | — | Health/readiness check |
+| POST | `/api/journal/entry` | `{ "content": "..." }` | Saves entry and returns `id`, `aiResponse`, `createdAt` |
+| GET | `/api/journal/entries` | none | Lists only the caller's entries |
+| POST | `/api/chat/rag` | `{ "query": "..." }` | Returns `reply` and `referencedEntries` |
+| GET | `/api/action-items` | none | Lists only the caller's goals |
+| PATCH | `/api/action-items/{id}` | `{ "status": "COMPLETED" }` | Updates an owned goal |
+| DELETE | `/api/action-items/{id}` | none | Deletes an owned goal |
+| GET | `/actuator/health` | none | Public liveness/readiness endpoint |
 
-Responses use ISO-8601 timestamps. RAG returns `reply` and bounded referenced-entry excerpts; action items use `PENDING` or `COMPLETED`.
+UID is intentionally absent from every request contract.
 
-## Data isolation
+## Security design summary
 
-```text
-users/{firebaseUid}/journal_entries/{entryId}
-users/{firebaseUid}/action_items/{actionItemId}
-```
+- Spring Security verifies signature, issuer, expiry, subject format, and required audience before controllers run.
+- Firebase cloud verification enables revoked-token checking.
+- PostgreSQL uses a non-superuser application role, UID predicates, parameterized SQL, and forced row-level security.
+- Firestore paths are always `users/{verifiedUid}/journal_entries` or `users/{verifiedUid}/action_items`.
+- AI prompts mark journal content as untrusted data; structured results are bounded and validated.
+- Gemini keys are loaded only from Secret Manager and sent through `x-goog-api-key`, never a URL or browser bundle.
+- CORS is an allowlist, tokens are kept in provider memory, and the client refreshes once after `401`.
+- Containers bind development ports to loopback, backend and frontend run as non-root users, and Nginx sends CSP/clickjacking/content-type/referrer headers.
+- Error responses use sanitized Problem Details and never return downstream exception text.
 
-Repositories construct these paths internally from the verified principal. There are no global collection queries or client-controlled paths. Keep Firestore security rules deployed as defense in depth.
+See [Security and threat model](docs/SECURITY.md) for trust boundaries, abuse cases, and residual risks.
 
-## Local development
+## Verification performed
 
-Prerequisites: JDK 17+, Node.js 18+, npm, a Firebase project with Google sign-in enabled, a Google Cloud project with Firestore/Secret Manager/Gemini enabled, and the Google Cloud CLI.
+The current local build was verified with:
 
-Backend: authenticate with `gcloud auth application-default login`, create `application-local.properties` from the backend example, then run `cd personal-gemini-journal-backend` and `.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local`. Test with `.\mvnw.cmd test`.
+- Maven unit/security/service tests passing.
+- PostgreSQL/Flyway migration applied successfully as the non-superuser app role.
+- Live health endpoint `UP` and unauthenticated API response `401`.
+- Vite 8 production build passing and `npm audit` reporting zero vulnerabilities.
+- Backend and frontend Docker images building successfully.
+- Full authenticated smoke result: journal, RAG, accountability, update, and cross-user isolation all pass.
+- Frontend served by UID `101` (unprivileged Nginx) with CSP and related security headers.
 
-Frontend: copy `personal-gemini-journal-frontend/.env.example` to `.env.local`, fill the Firebase Web App values, then run `cd personal-gemini-journal-frontend`, `npm ci`, and `npm run dev`. The frontend defaults to `http://localhost:3000`; the API defaults to `http://localhost:8080`.
+## Cloud phase status
 
-## Secrets and Cloud Run
+Cloud adapters already exist, but deployment is intentionally deferred. Google Cloud work still requires a project with Firebase Authentication, Firestore, Secret Manager, Gemini API access, Artifact Registry/Cloud Build or an equivalent image workflow, a Cloud Run service identity, production CORS/redirect origins, deployed Firestore rules, observability, and the challenge label `dev-tutorial=cloud-run-ai-challenge`.
 
-Never commit `.env.local`, service-account JSON, Gemini API keys, or Firebase Admin private keys. Browser Firebase configuration is client configuration; server credentials belong in Google Cloud IAM and Secret Manager. Build with `cd personal-gemini-journal-backend`, `.\mvnw.cmd clean package`, and `docker build --progress=plain -t personal-gemini-journal-api .`. Cloud Run supplies `PORT`; Spring uses `server.port=${PORT:8080}`. Configure `GEMINI_API_KEY_SECRET`, `GOOGLE_CLOUD_PROJECT`, `FIRESTORE_DATABASE_ID`, and `CORS_ALLOWED_ORIGINS` at deployment.
+Follow [Cloud Run migration plan](docs/CLOUD_RUN_MIGRATION.md) when credentials and billing safeguards are ready. That guide separates prerequisites, least-privilege IAM, migration steps, validation, rollback, and cost controls.
 
-## Security and operations
+## More documentation
 
-Malformed, expired, revoked, or cross-project tokens are rejected. Invalid input returns `400`, authentication failures return `401`, missing owned resources return `404`, and unexpected failures return sanitized `500` responses. Input sizes are bounded and sanitized before Gemini/Firestore use. RAG retrieval is user-scoped, and accountability extraction is asynchronous after the entry save.
-
-See [backend documentation](personal-gemini-journal-backend/README.md) and [frontend documentation](personal-gemini-journal-frontend/README.md) for implementation details.
+- [Local development and troubleshooting](docs/LOCAL_DEVELOPMENT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security and threat model](docs/SECURITY.md)
+- [Cloud Run migration plan](docs/CLOUD_RUN_MIGRATION.md)
+- [Backend guide](personal-gemini-journal-backend/README.md)
+- [Frontend guide](personal-gemini-journal-frontend/README.md)

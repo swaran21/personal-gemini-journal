@@ -1,115 +1,121 @@
 # Personal Gemini Journal Backend
 
-Secure Spring Boot 3 REST API for the Personal Gemini Journal. The service validates Firebase ID tokens, isolates Firestore data by Firebase UID, calls Gemini for reflection and retrieval-augmented generation, and extracts accountability items asynchronously.
+Spring Boot 3 REST API for authenticated journaling, private vector retrieval, and automated accountability. Java interfaces separate authentication, AI, embedding, and persistence concerns so the same HTTP application runs locally or on Google Cloud.
 
-## Responsibilities
+## Technology
 
-- Authenticate every application request with Firebase Admin.
-- Validate and sanitize journal and RAG input.
-- Persist journal text, AI response, timestamps, and embedding vectors.
-- Answer questions using only the authenticated user's private memories.
-- Extract commitments after save and persist owned action items.
-- Expose stable JSON contracts for the React frontend.
+- Java 17 and Spring Boot 3.4.8.
+- Spring Web, Security, OAuth2 Resource Server, Validation, JDBC, Actuator, and scheduling/async support.
+- PostgreSQL 16, Flyway, and pgvector for local persistence/RAG.
+- Keycloak OIDC JWT validation locally.
+- Ollama chat and embedding REST APIs locally.
+- Firebase Admin, Cloud Firestore, Secret Manager, and Gemini REST APIs in cloud mode.
+- JUnit 5, Mockito, Spring Security Test, and Testcontainers.
 
-## Architecture
-
-```text
-Firebase ID token
-        ↓
-FirebaseAuthenticationFilter → FirebasePrincipal(uid)
-        ↓
-Controllers → ChatService / AccountabilityService
-        ↓                         ↓
-JournalRepository          GeminiService / EmbeddingService
-        ↓                         ↓
-Firestore user collections      Gemini REST API
-```
-
-Package responsibilities:
+## Package responsibilities
 
 | Package | Responsibility |
 |---|---|
-| `security` | Firebase verification, principal creation, stateless security policy |
-| `config` | Firebase/Firestore clients, Secret Manager, RestClient, async execution |
-| `chat` | Chat and RAG endpoints, DTOs, orchestration |
-| `gemini` | Reflection, structured extraction, and embedding adapters |
-| `journal` | HTTP DTOs, Firestore models, and repository persistence |
-| `common` | Problem Details and sanitized exception responses |
+| `security` | Local OIDC/cloud Firebase authentication, principal mapping, CORS |
+| `chat` | Journal/RAG orchestration and accountability dispatch/outbox worker |
+| `gemini` | Provider-neutral AI ports plus Ollama and Gemini adapters |
+| `journal` | DTOs, models, persistence port, JDBC and Firestore adapters |
+| `config` | Profile-specific clients, typed properties, executors/scheduling |
+| `common` | Sanitized RFC Problem Details exception mapping |
 
-## Authentication and threat model
+## Profiles
 
-Clients send `Authorization: Bearer <Firebase ID token>`. The filter verifies signature, issuer, audience, expiry, and revocation with Firebase Admin. Only the resulting `FirebasePrincipal.uid()` is used by controllers and repositories. A UID supplied in JSON, a URL, or a query string is ignored because no such ownership input exists.
+`local` is the default profile. It requires PostgreSQL/pgvector, Keycloak, and Ollama. `cloud` disables JDBC/Flyway auto-configuration and enables Firebase, Firestore, Secret Manager, and Gemini beans.
 
-The API is stateless and does not use form login, server sessions, or browser cookies. The health endpoint is public; journal, chat, and action-item endpoints are protected. Unexpected errors are logged server-side while responses omit internal exception details.
+| Port/interface | Local adapter | Cloud adapter |
+|---|---|---|
+| `JournalRepository` | `JdbcJournalRepository` | `FirestoreJournalRepository` |
+| `GenerativeAiService` | `OllamaAiService` | `GeminiService` |
+| `EmbeddingService` | `OllamaAiService` | `GeminiEmbeddingService` |
+| `AccountabilityDispatcher` | Transactional JDBC outbox | `AccountabilityService` with `@Async` |
 
-## Firestore isolation
+## Authentication and ownership
 
-Every operation is below one of these paths:
+All routes except `/actuator/health/**` require a bearer token. Local JWT validation checks signature against the configured JWK set, issuer, expiration/not-before, required audience, and a bounded subject. The subject becomes `FirebasePrincipal.uid()` only after validation. Cloud mode calls `FirebaseAuth.verifyIdToken(token, true)`.
+
+Controllers never accept a UID. Repository calls always receive the UID from the authenticated principal.
+
+Local JDBC operations set transaction-local `app.current_user_id`, include explicit UID predicates, and run against forced RLS policies. The Docker database bootstrap creates a non-superuser app role. Firestore operations use only:
 
 ```text
 users/{uid}/journal_entries/{entryId}
 users/{uid}/action_items/{actionItemId}
 ```
 
-`JournalRepository` constructs paths from the verified UID. Entry listing, embedding retrieval, action-item listing, updates, and deletes are all scoped to that path. There are no global collection queries and no client-controlled collection paths. Keep Firestore security rules deployed as defense in depth.
+## RAG and accountability
 
-## AI pipeline
+An entry is reflected on and embedded before save. Local vectors use `vector(768)` and a cosine HNSW index. RAG performs `ORDER BY embedding <=> :queryVector` only after UID filtering. Cloud mode performs bounded in-memory cosine ranking over documents already loaded from the UID path.
 
-### Journal entry
+Local `saveEntry` also inserts an outbox row in the same transaction. The worker claims jobs with `FOR UPDATE SKIP LOCKED`, reclaims stale jobs, applies exponential retries, and deduplicates action items by owner/source entry/goal. Cloud mode currently uses the hackathon-required `@Async` post-save workflow.
 
-`POST /api/journal/entry` accepts validated `content` up to 10,000 characters. The service sanitizes control characters, loads recent entries from the same UID for conversational continuity, asks `gemini-2.5-flash` for an empathetic response, generates a `gemini-embedding-001` vector, and saves the result.
+## Configuration
 
-### Chat with Past Self
+Base configuration is in `src/main/resources/application.properties`; provider settings are in `application-local.properties` and `application-cloud.properties`.
 
-`POST /api/chat/rag` accepts `query` (legacy `question` is also accepted). The query is embedded, private entries are loaded from the caller's collection, cosine similarity ranks candidates, and the best bounded matches are sent as grounding context to Gemini. The result includes the answer and bounded excerpts from those referenced entries.
+Important local variables:
 
-### Accountability agent
+```text
+DATABASE_URL
+POSTGRES_USER
+POSTGRES_PASSWORD
+OIDC_ISSUER_URI
+OIDC_JWK_SET_URI
+OIDC_AUDIENCE
+OLLAMA_BASE_URL
+OLLAMA_CHAT_MODEL
+OLLAMA_EMBEDDING_MODEL
+CORS_ALLOWED_ORIGINS
+PORT
+```
 
-After saving an entry, `AccountabilityService.extractAndPersist` runs with Spring `@Async`. Gemini extracts concrete goals, commitments, and deadlines. Each valid item is stored with `PENDING` status under the same UID. This workflow is intentionally non-blocking; clients should reload action items after extraction completes.
+Important cloud variables:
 
-## API reference
+```text
+SPRING_PROFILES_ACTIVE=cloud
+GEMINI_API_KEY_SECRET=projects/.../secrets/.../versions/latest
+GOOGLE_CLOUD_PROJECT
+FIRESTORE_DATABASE_ID
+CORS_ALLOWED_ORIGINS
+PORT
+```
 
-All routes below require the Firebase bearer token unless explicitly stated.
+`GEMINI_API_KEY_SECRET` is a Secret Manager resource name, never the raw key. The key is retrieved once per instance and sent to Google in the `x-goog-api-key` header.
 
-| Method | Route | Request | Response |
-|---|---|---|---|
-| POST | `/api/journal/entry` | `{ "content": "..." }` | `id`, `content`, `aiResponse`, `extractedGoal`, `createdAt` |
-| GET | `/api/journal/entries` | — | Array of the caller's entries |
-| POST | `/api/chat/rag` | `{ "query": "..." }` | `reply`, `referencedEntries` |
-| GET | `/api/action-items` | — | Array of owned action items |
-| PATCH | `/api/action-items/{id}` | `{ "status": "COMPLETED" }` | `204 No Content` |
-| DELETE | `/api/action-items/{id}` | — | `204 No Content` |
-| GET | `/actuator/health` | — | Health status; public |
+## API
 
-Timestamps are ISO-8601 strings. Valid action statuses are exactly `PENDING` and `COMPLETED`. `extractedGoal` may be null because goal extraction is asynchronous.
+| Method | Route | Request |
+|---|---|---|
+| POST | `/api/journal/entry` | `{ "content": "..." }` |
+| GET | `/api/journal/entries` | none |
+| POST | `/api/chat/rag` | `{ "query": "..." }` |
+| GET | `/api/action-items` | none |
+| PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` |
+| DELETE | `/api/action-items/{id}` | none |
+| GET | `/actuator/health` | public |
 
-## Dependencies
+The older `/api/chat` and `/api/journal-entries` routes remain compatibility endpoints. New frontend code uses the contract above.
 
-The Maven build uses Spring Web, Security, Validation, and Actuator; Firebase Admin SDK; Google Cloud Firestore and Secret Manager; and Spring test/security-test modules. Gemini is called through Spring `RestClient`, so no Gemini key is embedded in the artifact.
+## Build and test
 
-## Configuration and secrets
+```powershell
+& .\mvnw.cmd test
+& .\mvnw.cmd -DskipTests package
+docker build --progress=plain -t personal-gemini-journal-backend .
+```
 
-`application.properties` reads `PORT`, `GEMINI_API_KEY_SECRET`, `GOOGLE_CLOUD_PROJECT`, `FIRESTORE_DATABASE_ID`, `GEMINI_MODEL`, `GEMINI_EMBEDDING_MODEL`, and `CORS_ALLOWED_ORIGINS` from the environment. The Gemini value is a Secret Manager resource name such as `projects/PROJECT_ID/secrets/GEMINI_API_KEY/versions/latest`, not the raw key.
+Unit tests cover sanitization, UID propagation, RAG scoping, error mapping, Firebase token failures, local JWT audience/subject validation, Ollama response parsing, outbox success/retry behavior, Firestore ID validation, and vector math. A pgvector integration test is enabled when Testcontainers can reach Docker. Root `scripts/local-smoke.ps1` performs the live authenticated two-user check.
 
-For local development, copy `src/main/resources/application-local.properties.example` to `application-local.properties`. This file is ignored by Git. Authenticate with Google Application Default Credentials using `gcloud auth application-default login`; the local identity needs Secret Manager and Firestore access.
+## Error contract
 
-## Run and test
+- `400`: invalid JSON, validation, status, or document ID.
+- `401`: missing or invalid bearer token.
+- `404`: absent or non-owned resource.
+- `503`: AI/database downstream state represented by `IllegalStateException`.
+- `500`: unexpected failure.
 
-From this directory, run `.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local` to start on port 8080, or `.\mvnw.cmd test` to run the automated suite. Package with `.\mvnw.cmd clean package`. The application honors Cloud Run's dynamic `PORT` variable through `server.port=${PORT:8080}`.
-
-## Container and Cloud Run
-
-The Dockerfile uses Eclipse Temurin 17 JRE Alpine and copies only the packaged JAR. Build with `docker build --progress=plain -t personal-gemini-journal-api .`. Deploy using a dedicated service account with Secret Manager Secret Accessor and Firestore permissions. Set `GEMINI_API_KEY_SECRET`, `GOOGLE_CLOUD_PROJECT`, `FIRESTORE_DATABASE_ID`, and production `CORS_ALLOWED_ORIGINS` as runtime configuration.
-
-## Error behavior
-
-Malformed JSON, blank/oversized text, and invalid statuses return `400 Bad Request`. Missing, malformed, expired, revoked, or invalid-project tokens return `401 Unauthorized`. Missing resources under the caller's collection return `404`. Unexpected failures return sanitized `500 Internal Server Error` responses.
-
-## Testing and production checklist
-
-- Run `.\mvnw.cmd clean test` before every release.
-- Use Firebase/Firestore emulators or a dedicated test project for integration tests.
-- Confirm Firestore rules deny all unauthorized and cross-user access.
-- Confirm the Cloud Run identity can access only the required secret and database.
-- Set a production frontend origin instead of using the localhost CORS default.
-- Monitor `/actuator/health`, Gemini failures, and asynchronous extraction failures.
+Problem Details are deliberately generic; server exceptions and private content are not reflected to the client.
