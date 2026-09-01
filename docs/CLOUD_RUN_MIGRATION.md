@@ -61,9 +61,9 @@ Create any required ordering/vector indexes before load testing. Confirm a user'
 
 ## Production reliability changes
 
-Before public use, replace cloud `@Async` accountability extraction with a durable Pub/Sub/Cloud Tasks event containing a UID, entry ID, and idempotency key. The consumer must re-read the entry only from the UID path, write deduplicated goals under that UID, retry transient failures, and dead-letter permanent failures.
+Before public use, replace cloud `@Async` journal processing with a durable Pub/Sub/Cloud Tasks event containing a UID, entry ID, and idempotency key. The consumer must re-read the entry only from the UID path, complete reflection/embedding, write deduplicated `PROPOSED` goals under that UID, retry transient failures, and dead-letter permanent failures.
 
-Add timeouts, retry policies with jitter, circuit breaking, per-user quotas, request correlation IDs, structured metrics, and alerts for authentication failures, AI latency/errors, outbox backlog, and Firestore errors.
+The included rate limiter is deliberately instance-local. Put Cloud Armor/API Gateway or a shared Redis-backed limiter in front of multi-instance Cloud Run, retaining verified-UID quotas for cost control. Add timeouts, retry policies with jitter, circuit breaking, request correlation IDs, structured metrics, and alerts for authentication failures, AI latency/errors, queue backlog, account-deletion failures, and Firestore errors.
 
 ## Validation checklist
 

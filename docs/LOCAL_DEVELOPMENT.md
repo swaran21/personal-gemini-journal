@@ -52,6 +52,9 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=gemma3:1b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 CORS_ALLOWED_ORIGINS=http://localhost:13000,http://localhost:3000
+JOURNAL_WRITES_PER_HOUR=30
+RAG_QUERIES_PER_HOUR=20
+API_REQUESTS_PER_MINUTE=120
 ```
 
 `PORT=18080` is used because this workstation already had another Java process on `8080`. Spring still defaults to Cloud Run-compatible `${PORT:8080}`.
@@ -110,6 +113,16 @@ docker exec personal-gemini-journal-postgres-1 psql -U journal_app -d journal -t
 
 The expected result is `f`/`false`.
 
-### Goals appear after the entry
+### Reflection and goals appear after the entry
 
-This is intentional. The response is returned after the journal is durable, while a scheduled outbox worker extracts goals. Inspect `accountability_outbox` and backend logs if no item appears after retries.
+This is intentional. Journal creation returns after the text and processing job are durable. The UI first shows `PENDING`, then polls for the reflection. Goal extraction produces a `PROPOSED` item that must be accepted before it counts toward progress. Inspect `accountability_outbox` and backend logs if processing does not complete after bounded retries.
+
+If processing reaches `FAILED`, use **Try reflection again** in the journal feed. The backend resets only the owned failed job and reuses the already stored text.
+
+### HTTP 429 responses
+
+Local per-user quotas default to 30 journal writes/hour, 20 RAG queries/hour, and 120 other API calls/minute. A rejected request includes `Retry-After`. Adjust the three rate-limit variables in `.env.local`, then recreate the backend container so Compose loads the new environment.
+
+### Delete local journal data
+
+Use the shield icon, type `DELETE`, and confirm. PostgreSQL removes every row owned by the signed-in subject, including queued jobs. The Keycloak identity remains because Keycloak is an external local identity provider; delete that login separately through `http://localhost:8180/admin` when required.

@@ -14,8 +14,11 @@ The project demonstrates that useful AI features do not require weakening owners
 - Multi-turn context from the caller's recent entries.
 - Vector embeddings stored with every entry.
 - "Chat with Past Self" using private similarity retrieval and grounded generation.
-- Durable local accountability outbox with retry and idempotent goal writes.
-- Pending/completed accountability dashboard with optimistic UI updates.
+- Persistence-first journal writes: HTTP 202 after durable save, then background reflection, embedding, and goal extraction.
+- Durable local processing outbox with bounded retry, stale-job reclamation, and user-triggered retry after terminal AI failure.
+- User-confirmed AI goal proposals; model suggestions never become commitments without approval.
+- Authenticated per-user quotas for journal writes, RAG, and ordinary API traffic.
+- UID-scoped permanent account-data deletion, including Firebase identity deletion in cloud mode.
 - Local and cloud adapters behind the same application ports.
 - Responsive warm journal UI, secure session handling, CSP, and container health checks.
 
@@ -45,8 +48,9 @@ Keycloak (local) / Firebase Auth (cloud)
   v
 Spring Security -> FirebasePrincipal(subject/uid)
   |
-  +-> ChatService -> GenerativeAiService -> Ollama / Gemini
-  |              `-> EmbeddingService ----> Ollama / Gemini Embeddings
+  +-> ChatService -> JournalRepository (durable PENDING entry + outbox)
+  |                    `-> background worker -> reflection + embedding + goal proposals
+  +-> RAG service -> private vector retrieval -> grounded Ollama / Gemini
   |
   `-> JournalRepository -> PostgreSQL + pgvector / Firestore
                            `-> users are isolated by UID and RLS/path ownership
@@ -61,7 +65,7 @@ Spring profiles select adapters:
 | AI | Ollama `gemma3:1b` | Gemini `gemini-2.5-flash` |
 | Embeddings | Ollama `nomic-embed-text` | Gemini Embedding API |
 | Secrets | Ignored `.env.local` | Google Secret Manager + workload identity |
-| Accountability | Transactional outbox worker | Spring `@Async` post-save extraction |
+| Background AI | Transactional outbox worker | Spring `@Async` adapter (managed queue planned) |
 
 Detailed flows are in [Architecture](docs/ARCHITECTURE.md) and [Security](docs/SECURITY.md).
 
@@ -115,7 +119,7 @@ Run the automated authenticated smoke test:
 & .\scripts\local-smoke.ps1
 ```
 
-The script creates disposable local users, submits a journal entry, performs RAG, waits for outbox-created action items, toggles status, checks a second user cannot see or modify the first user's data, and restores Keycloak's secure client settings in a `finally` block.
+The script creates disposable local users, verifies the immediate pending response, waits for background reflection, performs RAG, accepts and completes an AI goal proposal, checks a second user cannot see or modify the first user's data, and restores Keycloak's secure client settings in a `finally` block.
 
 Stop containers without deleting journal data:
 
@@ -135,12 +139,14 @@ All application routes require `Authorization: Bearer <access_token>`.
 
 | Method | Endpoint | Request | Response/purpose |
 |---|---|---|---|
-| POST | `/api/journal/entry` | `{ "content": "..." }` | Saves entry and returns `id`, `aiResponse`, `createdAt` |
+| POST | `/api/journal/entry` | `{ "content": "..." }` | `202`; durable entry with `processingStatus=PENDING` |
 | GET | `/api/journal/entries` | none | Lists only the caller's entries |
+| POST | `/api/journal/entries/{id}/retry` | none | `202`; retries only an owned failed entry |
 | POST | `/api/chat/rag` | `{ "query": "..." }` | Returns `reply` and `referencedEntries` |
-| GET | `/api/action-items` | none | Lists only the caller's goals |
-| PATCH | `/api/action-items/{id}` | `{ "status": "COMPLETED" }` | Updates an owned goal |
+| GET | `/api/action-items` | none | Lists owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
+| PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` | Accepts or updates an owned goal |
 | DELETE | `/api/action-items/{id}` | none | Deletes an owned goal |
+| DELETE | `/api/account` | none | Permanently deletes caller-owned application data and cloud identity |
 | GET | `/actuator/health` | none | Public liveness/readiness endpoint |
 
 UID is intentionally absent from every request contract.
@@ -156,6 +162,8 @@ UID is intentionally absent from every request contract.
 - CORS is an allowlist, tokens are kept in provider memory, and the client refreshes once after `401`.
 - Containers bind development ports to loopback, backend and frontend run as non-root users, and Nginx sends CSP/clickjacking/content-type/referrer headers.
 - Error responses use sanitized Problem Details and never return downstream exception text.
+- Rate limits use the verified UID, return `429` plus `Retry-After`, and expose no client-controlled quota key.
+- Destructive account deletion derives ownership from the principal and deletes data before the cloud identity, making partial failure retryable.
 
 See [Security and threat model](docs/SECURITY.md) for trust boundaries, abuse cases, and residual risks.
 
@@ -168,7 +176,7 @@ The current local build was verified with:
 - Live health endpoint `UP` and unauthenticated API response `401`.
 - Vite 8 production build passing and `npm audit` reporting zero vulnerabilities.
 - Backend and frontend Docker images building successfully.
-- Full authenticated smoke result: journal, RAG, accountability, update, and cross-user isolation all pass.
+- The previously verified authenticated smoke covered journal, RAG, accountability, update, and cross-user isolation. The revised async/proposal smoke script is ready but requires Docker Desktop to be running for live re-verification.
 - Frontend served by UID `101` (unprivileged Nginx) with CSP and related security headers.
 
 ## Cloud phase status

@@ -65,6 +65,10 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Validation returns `400`, missing/invalid authentication returns `401`, ownership-safe missing resources return `404`, downstream unavailability returns `503`, and unexpected errors return sanitized `500` Problem Details.
 - Responses never include stack traces, SQL, secret names, or downstream response bodies.
 - AI jobs use bounded retries and do not log journal text.
+- Journal text is committed before AI processing; provider downtime cannot reject or erase the entry.
+- Authenticated quotas use the verified UID and return `429` with `Retry-After`.
+- AI-created goals remain `PROPOSED` until the user accepts or dismisses them.
+- Account deletion accepts no UID and removes only records owned by the verified principal.
 - Frontend and backend run as non-root container users and have health checks.
 
 ## Abuse cases and expected result
@@ -79,16 +83,20 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 | Return HTML/script from AI | React text rendering and CSP prevent execution |
 | Crash after saving an entry | Local outbox remains pending and is reclaimed |
 | Crash after goal insert before completion mark | Unique source-entry/goal constraint makes retry idempotent |
+| AI provider unavailable | Entry remains saved; bounded retry ends in a user-visible retryable state |
+| Model invents an unwanted commitment | Suggestion remains `PROPOSED` until explicit user approval |
+| Flood AI endpoints with a valid account | Verified-UID quota returns `429` and `Retry-After` |
+| Request deletion with another UID | No UID exists in the contract; principal ownership controls deletion |
 | Expose a Gemini key in a browser bundle | No frontend configuration or code path accepts the key |
 
 ## Residual risks before public production
 
-- Add gateway/load-balancer rate limits and per-user AI quotas to control abuse and cost.
+- Replace instance-local quotas with a shared gateway/Redis quota when Cloud Run can scale beyond one instance.
 - Replace the cloud `@Async` workflow with a durable managed queue.
 - Add secret rotation procedures and validate rotation without restart if required.
 - Configure centralized audit logging, alerts, retention, and redaction review.
 - Run SAST, dependency/SBOM, container image, and DAST scans in CI.
-- Perform a privacy review for journal retention/export/deletion and obtain user consent for model processing.
+- Add export and documented retention windows; deletion is implemented but the broader privacy review and model-processing consent remain required.
 - Decide whether application-layer encryption is required in addition to managed encryption at rest.
 - Add production Firebase App Check only as defense in depth; it does not replace authentication.
 - Test Firestore rules in the emulator and in a dedicated test project before launch.

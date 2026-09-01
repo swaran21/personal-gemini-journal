@@ -7,7 +7,8 @@ The system is designed around four invariants:
 1. The server, not the browser, establishes data ownership.
 2. Journal content and model output remain isolated per authenticated subject.
 3. AI and persistence providers can change without changing HTTP contracts.
-4. Saving an entry must not silently lose its local accountability job.
+4. Journal durability must not depend on AI availability.
+5. AI suggestions require user confirmation before becoming commitments.
 
 ## Component view
 
@@ -22,6 +23,8 @@ Spring Security filter chain
   |-- OAuth2 resource server JWT decoder (local)
   `-- FirebaseAuthenticationFilter (cloud)
            |
+Verified-UID rate limiter
+           |
 Controllers -> ChatService -> application ports
                             |-- GenerativeAiService
                             |-- EmbeddingService
@@ -35,12 +38,13 @@ The controller always receives a `FirebasePrincipal`-shaped principal. In local 
 
 1. Bean Validation rejects missing, blank, or oversized content.
 2. `ChatService` removes NUL characters and normalizes surrounding whitespace.
-3. Recent entries are loaded using the authenticated UID.
-4. The AI adapter produces a bounded empathetic reflection.
-5. The embedding adapter produces a vector.
-6. The repository saves content, reflection, vector, and timestamp under the UID.
-7. Local PostgreSQL inserts an accountability outbox row in the same transaction.
-8. The response returns immediately; `extractedGoal` remains nullable because extraction is post-save.
+3. The repository atomically saves content with `PENDING` status and a local outbox job.
+4. The API returns `202 Accepted`; no AI provider is on the request path.
+5. A background worker loads recent entries using the authenticated owner stored in the trusted job.
+6. The AI and embedding adapters generate reflection and vector; the entry becomes `COMPLETED`.
+7. Optional goal extraction writes `PROPOSED` items. Its failure does not discard a successful reflection.
+8. Bounded failures are retried; terminal failure leaves the journal readable with `FAILED` status.
+9. `POST /api/journal/entries/{id}/retry` resets only an owned failed entry and reuses stored content.
 
 ## RAG flow
 
@@ -57,14 +61,16 @@ No global vector query exists. A user's query cannot retrieve another user's emb
 
 ```text
 journal transaction
-  |-- INSERT journal_entries
+  |-- INSERT journal_entries(PENDING)
   `-- INSERT accountability_outbox(PENDING)
 
 scheduled worker
   |-- reclaim stale PROCESSING jobs
   |-- claim with FOR UPDATE SKIP LOCKED
-  |-- extract goals through Ollama
-  |-- insert goals with unique(user, source entry, goal)
+  |-- reflect + embed through Ollama
+  |-- UPDATE journal_entries(COMPLETED)
+  |-- optionally extract PROPOSED goals
+  |-- insert proposals with unique(user, source entry, goal)
   `-- SUCCEEDED or exponential retry -> DEAD after max attempts
 ```
 
@@ -76,7 +82,13 @@ Cloud mode currently follows the hackathon requirement with a Spring `@Async` po
 
 ### Local PostgreSQL
 
-`journal_entries` stores `user_id`, content, AI response, `vector(768)`, creation time, and version. `action_items` stores owner, optional source entry, goal, state, and creation time. `accountability_outbox` is internal and has no HTTP endpoint.
+`journal_entries` stores `user_id`, content, nullable AI response/vector, processing status/error, creation time, and version. `action_items` stores owner, optional source entry, goal, `PROPOSED/PENDING/COMPLETED` state, and creation time. `accountability_outbox` is internal and has no HTTP endpoint.
+
+## Load and privacy controls
+
+The rate-limit filter runs only after authentication and keys quotas by verified principal UID. Local fixed-window state is bounded to 10,000 buckets. It protects the single-instance build without introducing Redis. Multi-instance Cloud Run requires a shared quota service or API gateway because instance-local counters are not globally authoritative.
+
+Account deletion is data-first. PostgreSQL deletes owned action items and entries in one transaction, with entry deletion cascading to outbox jobs. Firestore deletes bounded batches only from both `users/{uid}` subcollections. Cloud then removes the Firebase identity; local Keycloak identity remains externally managed.
 
 Forced RLS policies compare `user_id` to the transaction-local `app.current_user_id` setting. Repository methods set that value and also include explicit `WHERE user_id = :uid` predicates. The application login is not a superuser and cannot bypass RLS.
 

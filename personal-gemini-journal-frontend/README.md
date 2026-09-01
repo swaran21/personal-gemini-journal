@@ -28,6 +28,7 @@ src/
 |   |-- rag/                      Past-self conversation and references
 |   |-- accountability/           Dashboard/progress
 |   |-- actions/                  Reusable goal controls
+|   |-- account/                  Destructive deletion confirmation
 |   `-- common/                   Loader, error, and empty states
 |-- App.jsx                       Authenticated state and view orchestration
 |-- firebase.js                   Lazily loaded public Firebase config
@@ -55,7 +56,7 @@ The frontend never sends a UID.
 
 ### Daily Journal
 
-The textarea is capped at 10,000 characters and preserves the draft after failure. The submit control shows a spinner while the model reflects. Saved entries and AI responses render as text bubbles. The sidebar displays action items using the original visual format.
+The textarea is capped at 10,000 characters and preserves the draft after failure. Submission saves immediately; the new entry renders with a background-processing indicator while the feed polls boundedly for completion. A provider failure never removes the journal text and exposes a safe retry control using the stored entry ID rather than resending content from the browser.
 
 ### Chat with Past Self
 
@@ -63,7 +64,11 @@ Queries `/api/chat/rag`, renders a conversational response, and exposes bounded 
 
 ### Accountability Dashboard
 
-Loads `/api/action-items`, computes completion percentage, and toggles status optimistically. A failed patch restores the prior state. Delete uses the same optimistic/rollback behavior.
+Loads `/api/action-items`. AI output is rendered first as a proposal with **Add goal** and **Dismiss** controls. Completion percentage includes only accepted goals. Status changes and deletion are optimistic and roll back on failure.
+
+### Privacy and deletion
+
+The shield control opens a destructive confirmation dialog. The user must type `DELETE`; the request sends no UID and uses the same freshly acquired bearer token. In local OIDC mode the dialog explains that application data is removed while the externally managed Keycloak login record remains. Cloud mode also deletes the Firebase identity.
 
 ## Environment
 

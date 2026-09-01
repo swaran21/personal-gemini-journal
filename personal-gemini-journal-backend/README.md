@@ -16,7 +16,8 @@ Spring Boot 3 REST API for authenticated journaling, private vector retrieval, a
 
 | Package | Responsibility |
 |---|---|
-| `security` | Local OIDC/cloud Firebase authentication, principal mapping, CORS |
+| `security` | Local OIDC/cloud Firebase authentication, principal mapping, CORS, per-user quotas |
+| `account` | UID-scoped application-data and cloud identity deletion |
 | `chat` | Journal/RAG orchestration and accountability dispatch/outbox worker |
 | `gemini` | Provider-neutral AI ports plus Ollama and Gemini adapters |
 | `journal` | DTOs, models, persistence port, JDBC and Firestore adapters |
@@ -47,11 +48,21 @@ users/{uid}/journal_entries/{entryId}
 users/{uid}/action_items/{actionItemId}
 ```
 
-## RAG and accountability
+## Persistence-first AI processing, RAG, and accountability
 
-An entry is reflected on and embedded before save. Local vectors use `vector(768)` and a cosine HNSW index. RAG performs `ORDER BY embedding <=> :queryVector` only after UID filtering. Cloud mode performs bounded in-memory cosine ranking over documents already loaded from the UID path.
+`POST /api/journal/entry` validates and saves journal text before invoking an AI provider. It returns `202 Accepted` with `processingStatus=PENDING`. Local PostgreSQL creates the entry and outbox job atomically; the worker later adds reflection and embedding, then produces `PROPOSED` goal suggestions. Terminal provider failures set a safe `FAILED` state while preserving the original journal, and an owned retry endpoint resets the existing durable job.
 
-Local `saveEntry` also inserts an outbox row in the same transaction. The worker claims jobs with `FOR UPDATE SKIP LOCKED`, reclaims stale jobs, applies exponential retries, and deduplicates action items by owner/source entry/goal. Cloud mode currently uses the hackathon-required `@Async` post-save workflow.
+Local vectors use `vector(768)` and a cosine HNSW index. RAG performs `ORDER BY embedding <=> :queryVector` only after UID filtering and excludes entries without completed embeddings. Cloud mode performs bounded in-memory cosine ranking over documents already loaded from the UID path.
+
+The worker claims jobs with `FOR UPDATE SKIP LOCKED`, reclaims stale jobs, applies exponential retries, and deduplicates proposals by owner/source entry/goal. Goal extraction is optional: its failure cannot discard a successful reflection. Cloud mode currently uses a best-effort `@Async` adapter and must move to Cloud Tasks or Pub/Sub before multi-instance production use.
+
+AI suggestions start as `PROPOSED`. Only the user can PATCH them to `PENDING`; dismissal uses DELETE. This prevents autonomous model output from silently changing the user's accountability plan.
+
+## Availability, rate limits, and deletion
+
+The authenticated filter applies fixed-window quotas keyed by verified UID: 30 journal writes/hour, 20 RAG calls/hour, and 120 other API requests/minute by default. Responses include standard limit metadata and return `429` with `Retry-After`. These values are configurable through `JOURNAL_WRITES_PER_HOUR`, `RAG_QUERIES_PER_HOUR`, and `API_REQUESTS_PER_MINUTE`.
+
+`DELETE /api/account` accepts no UID. Local mode transactionally deletes action items, journal entries, and cascaded jobs; Keycloak remains the external identity authority. Cloud mode deletes isolated Firestore documents first and then deletes the Firebase identity. Data-first ordering avoids creating undeletable records if identity deletion fails.
 
 ## Configuration
 
@@ -71,6 +82,9 @@ OLLAMA_CHAT_MODEL
 OLLAMA_EMBEDDING_MODEL
 CORS_ALLOWED_ORIGINS
 PORT
+JOURNAL_WRITES_PER_HOUR
+RAG_QUERIES_PER_HOUR
+API_REQUESTS_PER_MINUTE
 ```
 
 Important cloud variables:
@@ -92,10 +106,12 @@ PORT
 |---|---|---|
 | POST | `/api/journal/entry` | `{ "content": "..." }` |
 | GET | `/api/journal/entries` | none |
+| POST | `/api/journal/entries/{id}/retry` | none; failed entries only |
 | POST | `/api/chat/rag` | `{ "query": "..." }` |
 | GET | `/api/action-items` | none |
 | PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` |
 | DELETE | `/api/action-items/{id}` | none |
+| DELETE | `/api/account` | none |
 | GET | `/actuator/health` | public |
 
 The older `/api/chat` and `/api/journal-entries` routes remain compatibility endpoints. New frontend code uses the contract above.
@@ -115,6 +131,7 @@ Unit tests cover sanitization, UID propagation, RAG scoping, error mapping, Fire
 - `400`: invalid JSON, validation, status, or document ID.
 - `401`: missing or invalid bearer token.
 - `404`: absent or non-owned resource.
+- `429`: authenticated-user quota exceeded; includes `Retry-After`.
 - `503`: AI/database downstream state represented by `IllegalStateException`.
 - `500`: unexpected failure.
 
