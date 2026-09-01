@@ -4,7 +4,7 @@
 
 - `personal-gemini-journal-backend/`: Spring Boot 3 API.
 - `personal-gemini-journal-frontend/`: React/Vite UI.
-- `local,gemini` (recommended development mode): Keycloak, PostgreSQL/pgvector, Gemini generation, local Ollama embeddings, transactional outbox.
+- `local,gemini` (recommended development mode): Keycloak, PostgreSQL/pgvector, Gemini Flash generation, Gemini 768-dimensional embeddings, transactional outbox.
 - `local`: fully local Keycloak, PostgreSQL/pgvector, Ollama generation and embeddings, transactional outbox.
 - `cloud`: Firebase token verification, Firestore, Gemini, Secret Manager; Cloud Run deployment remains deferred.
 

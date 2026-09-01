@@ -90,7 +90,12 @@ public class GeminiService implements GenerativeAiService {
         } catch (Exception exception) { throw new IllegalStateException("Gemini returned an invalid weekly reflection", exception); }
     }
     private List<String> strings(JsonNode array) { List<String> values = new ArrayList<>(); for (JsonNode node : array) { String value = node.asText().trim(); if (!value.isBlank() && value.length() <= 1000) values.add(value); } return values.stream().distinct().limit(10).toList(); }
-    private JsonNode post(String model, Object request) { return client.post().uri("/v1beta/models/{model}:generateContent", model).header("x-goog-api-key", secrets.apiKey()).contentType(MediaType.APPLICATION_JSON).body(request).retrieve().body(JsonNode.class); }
+    private JsonNode post(String model, Object request) {
+        if (model == null || !model.toLowerCase(java.util.Locale.ROOT).contains("flash")) {
+            throw new IllegalArgumentException("Only Gemini Flash generation models are permitted");
+        }
+        return client.post().uri("/v1beta/models/{model}:generateContent", model).header("x-goog-api-key", secrets.apiKey()).contentType(MediaType.APPLICATION_JSON).body(request).retrieve().body(JsonNode.class);
+    }
     private String text(JsonNode response) { if (response == null) throw new IllegalStateException("Gemini returned no response"); String value = response.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText(); if (value.isBlank()) throw new IllegalStateException("Gemini returned no content"); return value; }
     private String history(List<JournalEntry> entries) { return entries.stream().map(e -> "User: " + e.text() + "\nAssistant: " + e.response()).reduce("", (a, b) -> a + "\n" + b); }
     private String conversation(RagContext context) { return context.conversation().stream().map(turn -> turn.role() + ": " + turn.content()).reduce("", (left, right) -> left + "\n" + right); }

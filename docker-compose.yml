@@ -51,7 +51,7 @@ services:
       OLLAMA_HOST: http://ollama:11434
       AI_GENERATION_PROVIDER: ${AI_GENERATION_PROVIDER:-ollama}
     entrypoint: ["/bin/sh", "-c"]
-    command: ["sleep 5; ollama pull ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}; if [ \"${AI_GENERATION_PROVIDER:-ollama}\" = \"ollama\" ]; then ollama pull ${OLLAMA_CHAT_MODEL:-gemma3:1b}; fi"]
+    command: ["if [ \"${AI_GENERATION_PROVIDER:-ollama}\" = \"ollama\" ]; then sleep 5; ollama pull ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}; ollama pull ${OLLAMA_CHAT_MODEL:-gemma3:1b}; fi"]
     depends_on:
       - ollama
     restart: "no"
@@ -70,6 +70,8 @@ services:
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}
+      GEMINI_EMBEDDING_DIMENSIONS: ${GEMINI_EMBEDDING_DIMENSIONS:-768}
       JOURNAL_WRITES_PER_HOUR: ${JOURNAL_WRITES_PER_HOUR:-30}
       RAG_QUERIES_PER_HOUR: ${RAG_QUERIES_PER_HOUR:-20}
       API_REQUESTS_PER_MINUTE: ${API_REQUESTS_PER_MINUTE:-120}

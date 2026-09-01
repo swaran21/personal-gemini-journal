@@ -63,7 +63,7 @@ Location is optional. Browser geolocation runs only after **Add current location
 
 ### Chat with Past Self
 
-Queries `/api/chat/rag`, renders a conversational response, and exposes timestamped bounded `referencedEntries` through a collapsible context list. The browser sends its IANA time zone plus at most 10 earlier turns so follow-up questions are meaningful. History is held only for the signed-in browser session, survives tab switching, and is cleared when the authenticated subject changes. Model content is rendered as text, not HTML.
+Queries `/api/chat/rag`, renders a conversational response, and exposes timestamped bounded `referencedEntries` through a collapsible context list. The browser sends its IANA time zone plus at most 10 earlier turns in the public `{ role: "user" | "model", text: "..." }` shape so follow-up questions are meaningful. History is held only for the signed-in browser session, survives tab switching, and is cleared when the authenticated subject changes. Model content is rendered as text, not HTML.
 
 ### Accountability Dashboard
 

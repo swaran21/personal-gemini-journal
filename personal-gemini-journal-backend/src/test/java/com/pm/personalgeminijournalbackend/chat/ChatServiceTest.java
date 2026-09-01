@@ -90,12 +90,13 @@ class ChatServiceTest {
  @Test void passesBoundedSanitizedConversationToGroundedGenerator() {
   GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
   when(embeddings.embed("What about that?")).thenReturn(List.of(1d)); when(repo.findRelevant("uid-1", List.of(1d), 5)).thenReturn(List.of()); when(gemini.answerWithGrounding(any(RagContext.class))).thenReturn("Answer");
-  var request = new RagChatRequest("What about that?", "UTC", List.of(new RagChatRequest.HistoryMessage(ChatTurn.Role.USER, " Earlier\u0000 question "), new RagChatRequest.HistoryMessage(ChatTurn.Role.ASSISTANT, "Earlier answer")));
+  var request = new RagChatRequest("What about that?", "UTC", List.of(new RagChatRequest.HistoryMessage(RagChatRequest.Role.USER, " Earlier\u0000 question "), new RagChatRequest.HistoryMessage(RagChatRequest.Role.MODEL, "Earlier answer")));
 
   service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", request);
 
   var captor = org.mockito.ArgumentCaptor.forClass(RagContext.class); verify(gemini).answerWithGrounding(captor.capture());
   assertEquals("Earlier question", captor.getValue().conversation().get(0).content());
+  assertEquals(ChatTurn.Role.ASSISTANT, captor.getValue().conversation().get(1).role());
   assertEquals(2, captor.getValue().conversation().size());
  }
 }

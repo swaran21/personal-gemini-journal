@@ -2,7 +2,7 @@
 
 Personal Gemini Journal is a private reflection, memory retrieval, and accountability application. A signed-in user can write a journal entry, receive an empathetic AI response, ask questions grounded in their own earlier entries, and track goals extracted from their writing.
 
-The repository is deliberately local-first during the build phase. Keycloak and PostgreSQL/pgvector run locally. Ollama always supplies local embeddings and can supply generation too; the recommended development mode uses a server-side Google AI Studio key with Gemini for higher-quality reflections, grounded chat, weekly summaries, and goal extraction. The same application exposes a `cloud` Spring profile for the planned Firebase Authentication, Firestore, Gemini, Secret Manager, and Cloud Run deployment.
+The repository is deliberately local-first during the build phase. Keycloak and PostgreSQL/pgvector run locally. The recommended development mode uses a server-side Google AI Studio key with Gemini Flash for generation and Gemini Embedding for private vector retrieval; Ollama remains an optional fully local fallback. The same application exposes a `cloud` Spring profile for the planned Firebase Authentication, Firestore, Gemini, Secret Manager, and Cloud Run deployment.
 
 ## Aim
 
@@ -67,7 +67,7 @@ Spring profiles select adapters:
 | Authentication | Keycloak OIDC JWT | Firebase ID token verification |
 | Persistence | PostgreSQL 16 + pgvector | Cloud Firestore |
 | AI | Gemini `gemini-2.5-flash` with `gemini` profile; Ollama fallback | Gemini `gemini-2.5-flash` |
-| Embeddings | Ollama `nomic-embed-text` (including hybrid Gemini mode) | Gemini Embedding API |
+| Embeddings | Gemini `gemini-embedding-001`, normalized to 768 dimensions | Gemini `gemini-embedding-001` |
 | Secrets | Ignored `.env.local` | Google Secret Manager + workload identity |
 | Background AI | Transactional outbox worker | Spring `@Async` adapter (managed queue planned) |
 
@@ -149,7 +149,7 @@ All application routes require `Authorization: Bearer <access_token>`.
 | POST | `/api/journal/entry` | `{ "content": "...", "location": { ... } }` | `202`; durable entry; location is optional |
 | GET | `/api/journal/entries?limit=20&cursor=...` | none | Cursor page of only the caller's entries |
 | POST | `/api/journal/entries/{id}/retry` | none | `202`; retries only an owned failed entry |
-| POST | `/api/chat/rag` | `{ "query": "...", "timeZone": "Asia/Kolkata", "history": [...] }` | Temporal/semantic grounded reply and timestamped references |
+| POST | `/api/chat/rag` | `{ "query": "...", "timeZone": "Asia/Kolkata", "history": [{ "role": "user" | "model", "text": "..." }] }` | Temporal/semantic grounded reply and timestamped references |
 | POST | `/api/reflections/weekly` | `{ "timeZone": "Asia/Calcutta" }` | Grounded current-week patterns and focus |
 | GET | `/api/action-items?limit=50&cursor=...` | none | Cursor page of owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
 | POST | `/api/action-items` | `{ "goal": "..." }` | Creates an owned user-authored `PENDING` goal |

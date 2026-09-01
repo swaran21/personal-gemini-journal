@@ -44,7 +44,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Structured AI JSON is parsed, deduplicated, count-limited, and length-limited.
 - React renders response text through JSX, not `dangerouslySetInnerHTML`.
 - RAG reference excerpts are capped at 500 characters.
-- RAG chat history is session-scoped, cleared when the authenticated subject changes, and bounded to 10 validated turns; it contains no client-supplied UID.
+- RAG chat history accepts bounded `{ role: "user" | "model", text: "..." }` turns, is session-scoped, cleared when the authenticated subject changes, and contains no client-supplied UID.
 - Pagination limits and opaque cursors are validated; keyset queries remain UID-scoped.
 - Coordinates must be finite and within geographic ranges; labels are plain text and capped at 200 characters.
 

@@ -78,8 +78,8 @@ journal transaction
 scheduled worker
   |-- reclaim stale PROCESSING jobs
   |-- claim with FOR UPDATE SKIP LOCKED
-  |-- reflect through Gemini (recommended) or Ollama
-  |-- embed locally through Ollama
+  |-- reflect through Gemini Flash (recommended) or Ollama
+  |-- embed through Gemini Embedding at 768 dimensions (recommended) or Ollama
   |-- UPDATE journal_entries(COMPLETED)
   |-- optionally extract PROPOSED goals
   |-- insert proposals with unique(user, source entry, goal)

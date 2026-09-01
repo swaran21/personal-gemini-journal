@@ -15,8 +15,8 @@ export function RagView({ messages, setMessages, setError }) {
     setAsking(true);
     setError('');
     const history = messages.slice(-10).map((message) => ({
-      role: message.role === 'user' ? 'USER' : 'ASSISTANT',
-      content: message.role === 'user' ? message.text : message.reply,
+      role: message.role === 'user' ? 'user' : 'model',
+      text: message.role === 'user' ? message.text : message.reply,
     }));
     setMessages((current) => [...current, { role: 'user', text: value }]);
     setQuery('');

@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -76,5 +77,13 @@ class GeminiServiceTest {
         assertEquals(List.of("You built a RAG application."), result.highlights());
         assertEquals("Document the RAG architecture.", result.suggestedFocus());
         server.verify();
+    }
+
+    @Test void refusesNonFlashGenerationModels() {
+        ApplicationConfig.GeminiProperties properties = new ApplicationConfig.GeminiProperties();
+        properties.setModel("gemini-2.5-pro");
+        GeminiService nonFlash = new GeminiService(RestClient.builder().baseUrl("https://generativelanguage.googleapis.com").build(), () -> "runtime-key", properties, new ObjectMapper());
+
+        assertThrows(IllegalArgumentException.class, () -> nonFlash.reflect("private entry", List.of()));
     }
 }

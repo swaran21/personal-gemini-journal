@@ -10,7 +10,7 @@ docker compose --env-file .env.local up -d --build
 docker compose --env-file .env.local ps
 ```
 
-Open `http://localhost:13000`. Gemini performs generation in the recommended mode; Ollama downloads only the local `nomic-embed-text` embedding model. Model data is stored in the `journal-ollama` volume and reused.
+Open `http://localhost:13000`. In the recommended Gemini mode, both generation and embeddings use Gemini and Ollama pulls no models. The `ollama` profile remains available for a fully local fallback.
 
 ### Gemini key for local development
 
@@ -20,6 +20,8 @@ Create a key in Google AI Studio and put it only in the ignored root `.env.local
 AI_GENERATION_PROVIDER=gemini
 GEMINI_API_KEY=<paste the key here>
 GEMINI_MODEL=gemini-2.5-flash
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+GEMINI_EMBEDDING_DIMENSIONS=768
 ```
 
 Never use a `VITE_*` variable for this key: Vite variables are downloadable by every browser. Never commit `.env.local`. After changing Compose environment values, recreate the backend because Compose reads them when creating the container:
@@ -28,7 +30,7 @@ Never use a `VITE_*` variable for this key: Vite variables are downloadable by e
 docker compose --env-file .env.local up -d --build --force-recreate backend
 ```
 
-The key is used for journal reflection, RAG answer generation, weekly reflection, and action-item extraction. Embeddings remain local through Ollama `nomic-embed-text`, so journal text sent for embedding does not use Gemini embedding quota. To run without any external AI request, set `AI_GENERATION_PROVIDER=ollama` and leave `GEMINI_API_KEY` empty; the smaller local model will usually produce less capable summaries.
+The key is used for journal reflection, RAG answer generation, weekly reflection, action-item extraction, and embeddings. `gemini-embedding-001` is requested at 768 dimensions to match the local pgvector schema and is normalized before cosine search. To run without any external AI request, set `AI_GENERATION_PROVIDER=ollama` and leave `GEMINI_API_KEY` empty; the smaller local model will usually produce less capable summaries.
 
 Useful checks:
 
@@ -71,6 +73,8 @@ OLLAMA_CHAT_MODEL=gemma3:1b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 GEMINI_API_KEY=<your Google AI Studio key>
 GEMINI_MODEL=gemini-2.5-flash
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+GEMINI_EMBEDDING_DIMENSIONS=768
 CORS_ALLOWED_ORIGINS=http://localhost:13000,http://localhost:3000
 JOURNAL_WRITES_PER_HOUR=30
 RAG_QUERIES_PER_HOUR=20

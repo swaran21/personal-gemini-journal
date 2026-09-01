@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 
 /** Generates Gemini embeddings and performs bounded in-memory similarity ranking for one user's entries. */
 @Service
-@Profile("cloud")
+@Profile({"cloud", "gemini"})
 public class GeminiEmbeddingService implements EmbeddingService {
     private static final int MAX_CANDIDATES = 100;
     private final RestClient client;
@@ -29,16 +29,19 @@ public class GeminiEmbeddingService implements EmbeddingService {
     }
 
     public List<Double> embed(String text) {
+        if (text == null || text.isBlank()) throw new IllegalArgumentException("text must not be blank");
+        int dimensions = properties.getEmbeddingDimensions();
+        if (dimensions < 128 || dimensions > 3072) throw new IllegalArgumentException("Gemini embedding dimensions must be between 128 and 3072");
         JsonNode response = client.post().uri("/v1beta/models/{model}:embedContent", properties.getEmbeddingModel())
                 .header("x-goog-api-key", secrets.apiKey())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("model", "models/" + properties.getEmbeddingModel(), "content", Map.of("parts", List.of(Map.of("text", text)))))
+                .body(Map.of("model", "models/" + properties.getEmbeddingModel(), "content", Map.of("parts", List.of(Map.of("text", text))), "outputDimensionality", dimensions))
                 .retrieve().body(JsonNode.class);
         List<Double> values = new ArrayList<>();
         if (response == null) throw new IllegalStateException("Gemini returned no embedding response");
         for (JsonNode node : response.path("embedding").path("values")) values.add(node.asDouble());
-        if (values.isEmpty()) throw new IllegalStateException("Gemini returned no embedding");
-        return List.copyOf(values);
+        if (values.size() != dimensions) throw new IllegalStateException("Gemini returned an invalid embedding dimension");
+        return normalize(values);
     }
 
     public List<RetrievedEntry> mostRelevant(List<Double> queryEmbedding, List<JournalEntry> candidates, int limit) {
@@ -59,6 +62,14 @@ public class GeminiEmbeddingService implements EmbeddingService {
         }
         if (leftMagnitude == 0d || rightMagnitude == 0d) return -1d;
         return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
+    }
+
+    private List<Double> normalize(List<Double> values) {
+        double magnitude = 0d;
+        for (Double value : values) magnitude += value * value;
+        if (magnitude == 0d) throw new IllegalStateException("Gemini returned a zero embedding");
+        double divisor = Math.sqrt(magnitude);
+        return values.stream().map(value -> value / divisor).toList();
     }
 
     public record RetrievedEntry(JournalEntry entry, double score) { }

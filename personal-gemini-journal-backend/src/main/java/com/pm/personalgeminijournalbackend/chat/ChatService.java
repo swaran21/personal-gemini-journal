@@ -46,7 +46,7 @@ public class ChatService {
                 .orElseGet(() -> journalRepository.findRelevant(uid, embeddings.embed(question), 5));
         List<ChatTurn> conversation = request.history().stream()
                 .limit(10)
-                .map(message -> new ChatTurn(message.role(), sanitize(message.content())))
+                .map(message -> new ChatTurn(message.role() == RagChatRequest.Role.USER ? ChatTurn.Role.USER : ChatTurn.Role.ASSISTANT, sanitize(message.content())))
                 .toList();
         String reply = gemini.answerWithGrounding(new RagContext(question, entries, conversation,
                 temporalQueries.now(), zone, timeRange.map(TemporalQueryResolver.TimeRange::label).orElse(null)));

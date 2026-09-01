@@ -1,9 +1,11 @@
 package com.pm.personalgeminijournalbackend.gemini;
 
 import com.pm.personalgeminijournalbackend.config.ApplicationConfig;
-import com.pm.personalgeminijournalbackend.config.GeminiSecretProvider;
 import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
@@ -11,10 +13,22 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
+import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.hamcrest.Matchers.containsString;
 
 class GeminiEmbeddingServiceTest {
-    private final GeminiEmbeddingService service = new GeminiEmbeddingService(mock(RestClient.class), mock(GeminiSecretProvider.class), new ApplicationConfig.GeminiProperties());
+    private GeminiEmbeddingService service;
+    private MockRestServiceServer server;
+
+    @BeforeEach void setUp() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://generativelanguage.googleapis.com");
+        server = MockRestServiceServer.bindTo(builder).build();
+        ApplicationConfig.GeminiProperties properties = new ApplicationConfig.GeminiProperties();
+        properties.setEmbeddingDimensions(768);
+        service = new GeminiEmbeddingService(builder.build(), () -> "runtime-key", properties);
+    }
 
     @Test void cosineSimilarityReturnsExpectedScoreForParallelVectors() {
         assertEquals(1d, service.cosineSimilarity(List.of(3d, 4d), List.of(6d, 8d)), 0.00001d);
@@ -49,6 +63,20 @@ class GeminiEmbeddingServiceTest {
     @Test void mostRelevantUsesAtLeastOneResultWhenLimitIsZero() {
         List<GeminiEmbeddingService.RetrievedEntry> results = service.mostRelevant(List.of(1d, 0d), List.of(entry("one", List.of(1d, 0d))), 0);
         assertEquals(1, results.size());
+    }
+
+    @Test void requestsConfigured768DimensionsAndNormalizesGeminiEmbedding() {
+        String vector = "[" + "1,".repeat(767) + "1]";
+        server.expect(once(), requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"))
+                .andExpect(header("x-goog-api-key", "runtime-key"))
+                .andExpect(content().string(containsString("\"outputDimensionality\":768")))
+                .andRespond(withSuccess("{\"embedding\":{\"values\":" + vector + "}}", MediaType.APPLICATION_JSON));
+
+        List<Double> embedding = service.embed("private journal text");
+
+        assertEquals(768, embedding.size());
+        assertEquals(1d, Math.sqrt(embedding.stream().mapToDouble(value -> value * value).sum()), 0.000001d);
+        server.verify();
     }
 
     private JournalEntry entry(String id, List<Double> embedding) {
