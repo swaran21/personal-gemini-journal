@@ -1,9 +1,10 @@
-import { BookHeart, MessageCircleHeart, Target } from 'lucide-react';
+import { BookHeart, CalendarDays, MessageCircleHeart, Target } from 'lucide-react';
 
 const tabs = [
   ['journal', BookHeart, 'Daily Journal'],
   ['rag', MessageCircleHeart, 'Chat with Past Self'],
   ['goals', Target, 'Accountability'],
+  ['weekly', CalendarDays, 'Weekly Reflection'],
 ];
 
 export function ViewTabs({ view, setView }) {

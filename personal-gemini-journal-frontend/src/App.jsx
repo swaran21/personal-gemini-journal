@@ -9,6 +9,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { JournalView } from './components/journal/JournalView';
 import { RagView } from './components/rag/RagView';
 import { AccountabilityView } from './components/accountability/AccountabilityView';
+import { WeeklyReflectionView } from './components/reflection/WeeklyReflectionView';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -16,20 +17,23 @@ export default function App() {
   const [view, setView] = useState('journal');
   const [entries, setEntries] = useState([]);
   const [actionItems, setActionItems] = useState([]);
+  const [entryPage, setEntryPage] = useState({ nextCursor: null, hasMore: false });
+  const [actionPage, setActionPage] = useState({ nextCursor: null, hasMore: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const refreshEntries = useCallback(async () => {
-    const journalEntries = await api('/api/journal/entries');
-    setEntries(journalEntries);
-    return journalEntries;
+    const page = await api('/api/journal/entries?limit=20');
+    setEntries(page.items); setEntryPage(page);
+    return page.items;
   }, []);
 
   const refreshActionItems = useCallback(async () => {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 2000));
       try {
-        setActionItems(await api('/api/action-items'));
+        const page = await api('/api/action-items?limit=50');
+        setActionItems(page.items); setActionPage(page); return page.items;
       } catch (requestError) {
         if (attempt === 5) setError(requestError.message);
       }
@@ -40,12 +44,12 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [journalEntries, goals] = await Promise.all([
-        api('/api/journal/entries'),
-        api('/api/action-items'),
+      const [journalPage, goalPage] = await Promise.all([
+        api('/api/journal/entries?limit=20'),
+        api('/api/action-items?limit=50'),
       ]);
-      setEntries(journalEntries);
-      setActionItems(goals);
+      setEntries(journalPage.items); setEntryPage(journalPage);
+      setActionItems(goalPage.items); setActionPage(goalPage);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -64,13 +68,14 @@ export default function App() {
   if (!user) return <LoginScreen initialError={error} />;
 
   return <div className="min-h-screen bg-[#F9F8F4] text-[#2D362E] selection:bg-[#7A8D80]/20">
-    <Header user={user} />
+    <Header user={user} setError={setError} />
     <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
       <ViewTabs view={view} setView={setView} />
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
-      {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshEntries={refreshEntries} refreshItems={refreshActionItems} loading={loading} setError={setError} />}
+      {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshEntries={refreshEntries} refreshItems={refreshActionItems} loading={loading} setError={setError} hasMore={entryPage.hasMore} loadMore={async () => { try { const page = await api(`/api/journal/entries?limit=20&cursor=${encodeURIComponent(entryPage.nextCursor)}`); setEntries((current) => [...current, ...page.items]); setEntryPage(page); } catch (requestError) { setError(requestError.message); } }} />}
       {view === 'rag' && <RagView setError={setError} />}
-      {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} />}
+      {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} hasMore={actionPage.hasMore} loadMore={async () => { try { const page = await api(`/api/action-items?limit=50&cursor=${encodeURIComponent(actionPage.nextCursor)}`); setActionItems((current) => [...current, ...page.items]); setActionPage(page); } catch (requestError) { setError(requestError.message); } }} />}
+      {view === 'weekly' && <WeeklyReflectionView setError={setError} />}
     </main>
   </div>;
 }
