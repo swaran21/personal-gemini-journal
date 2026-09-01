@@ -22,6 +22,7 @@
 
 - `POST /api/journal/entry`
 - `GET /api/journal/entries?limit=&cursor=`
+- `GET /api/journal/calendar?year=&month=&timeZone=`
 - `POST /api/journal/entries/{id}/retry`
 - `POST /api/chat/rag` with time zone and at most 10 prior session turns; temporal questions use UID-scoped date ranges and other questions use vector retrieval.
 - `POST /api/reflections/weekly`
@@ -30,6 +31,10 @@
 - `PATCH|DELETE /api/action-items/{id}`
 - `GET /api/user/export?format=json|markdown`
 - `DELETE /api/account`
+- `GET /api/user/me`; all verified identities are `USER`, and trusted `journal-admin`/`admin` claims add `ADMIN`.
+- `GET /api/admin/status` requires `ADMIN` and exposes no journal data.
+
+RAG responses include `retrievalMode`: `TEMPORAL_SQL`, `LOCATION_HYBRID`, `SEMANTIC_HYBRID`, or `LEXICAL_SQL_FALLBACK`.
 
 ## Verification
 

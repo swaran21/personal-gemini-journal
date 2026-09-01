@@ -50,11 +50,13 @@ The controller always receives a `FirebasePrincipal`-shaped principal. In local 
 ## RAG flow
 
 1. The question, IANA time zone, and at most 10 prior session turns are validated and sanitized.
-2. Questions containing `today`, `yesterday`, `this/last week`, or `last N hours` use an exact UID-scoped timestamp range and do not perform semantic retrieval.
-3. Other questions are embedded and `JournalRepository.findRelevant(uid, vector, 5)` performs UID-scoped retrieval.
-4. PostgreSQL uses pgvector cosine distance; Firestore loads at most 100 documents from the UID path and ranks them in memory.
+2. Questions containing `today`, `yesterday`, `this/last week`, or `last/past/previous N hours` use exact UID-scoped SQL/date retrieval (`TEMPORAL_SQL`).
+3. Location-intent questions prioritize bounded content/location-label matches and fuse them with vector matches (`LOCATION_HYBRID`).
+4. Other questions fuse pgvector similarity with bounded lexical matches (`SEMANTIC_HYBRID`), deduplicated by owned entry ID.
+5. If the embedding provider is rate-limited or unavailable, UID-scoped lexical retrieval remains available (`LEXICAL_SQL_FALLBACK`). Reflection persistence is independent of embedding success.
+6. PostgreSQL uses pgvector cosine distance; Firestore loads at most 100 documents from the UID path and ranks them in memory.
 5. Bounded entries, exact timestamps, current time, time zone, and bounded prior turns become the AI grounding prompt. Stored text and previous messages remain explicitly untrusted.
-6. The response returns the AI answer and timestamped excerpts capped at 500 journal-text characters.
+7. The response returns the AI answer, timestamped excerpts capped at 500 characters, and the retrieval mode.
 
 No global vector query exists. A user's query cannot retrieve another user's embedding or content.
 
@@ -67,6 +69,12 @@ Weekly reflection resolves a client-provided IANA time zone, normalizes the requ
 Data takeout streams JSON or Markdown while traversing UID-scoped pages. It exports journal text, reflection, processing state, approved location, and action items. Embeddings, outbox jobs, credentials, internal errors, and UID are excluded.
 
 Location is provided by the browser only after a user gesture, validated again by the backend, and stored with the journal entry. The UI opens a keyless Google Maps URL rather than loading a third-party map SDK or browser API key.
+
+The memory calendar resolves the requested year/month in the user's validated IANA time zone and queries only that authenticated UID's interval. It never trusts a browser UID and never loads a global calendar dataset.
+
+## Authentication and roles
+
+Local JWT roles come only from signed Keycloak `realm_access.roles`; cloud roles come only from verified Firebase custom claims. Every verified identity receives `ROLE_USER`. `journal-admin` or `admin` adds `ROLE_ADMIN`. `/api/admin/**` requires admin authority, while all ordinary `/api/**` routes require user authority. Roles control capabilities, not ownership: even administrators cannot read another user's journal through application repositories.
 
 ## Local accountability outbox
 

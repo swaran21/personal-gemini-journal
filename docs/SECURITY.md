@@ -24,6 +24,9 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - The API is stateless and accepts bearer tokens only in the `Authorization` header.
 - The frontend obtains a current provider token for every fetch, performs one forced refresh after `401`, then signs out on `401/403`.
 - Application code does not cache access tokens in `localStorage`.
+- Signed Keycloak realm roles and verified Firebase custom claims are allowlist-mapped to `ROLE_USER`/`ROLE_ADMIN`; client-supplied role headers or JSON are never trusted.
+- Every verified identity receives `ROLE_USER`. Only `journal-admin`/`admin` claims add `ROLE_ADMIN`, and `/api/admin/**` is separately authorized.
+- Administrative authority never bypasses UID predicates, RLS, or Firestore paths and therefore grants no cross-user journal visibility.
 
 ### IDOR and tenant isolation
 
@@ -44,6 +47,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Structured AI JSON is parsed, deduplicated, count-limited, and length-limited.
 - React renders response text through JSX, not `dangerouslySetInnerHTML`.
 - RAG reference excerpts are capped at 500 characters.
+- Hybrid retrieval remains UID-scoped in every branch: exact temporal SQL, location-aware lexical/vector fusion, semantic fusion, and lexical fallback.
 - RAG chat history accepts bounded `{ role: "user" | "model", text: "..." }` turns, is session-scoped, cleared when the authenticated subject changes, and contains no client-supplied UID.
 - Pagination limits and opaque cursors are validated; keyset queries remain UID-scoped.
 - Coordinates must be finite and within geographic ranges; labels are plain text and capped at 200 characters.
@@ -99,6 +103,9 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 | Guess or alter a page cursor | Cursor validation plus UID predicates/path scoping prevents ownership changes |
 | Read embeddings through takeout | Export schema deliberately excludes embeddings and internal processing data |
 | Capture location without consent | Browser API is invoked only by the location button; location is optional |
+| Add `role=admin` to a request | No request role is consumed; only verified provider claims create authorities |
+| Admin attempts to query another UID | No UID parameter exists and repository ownership remains the authenticated subject |
+| Exhaust Gemini embedding quota | Reflection persists; bounded UID-scoped lexical retrieval remains available |
 
 ## Residual risks before public production
 

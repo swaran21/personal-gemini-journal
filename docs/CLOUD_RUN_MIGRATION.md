@@ -32,7 +32,7 @@ The challenge instructions require a Google Cloud project with billing enabled. 
 |---|---|
 | Keycloak | Firebase Authentication with Google provider |
 | PostgreSQL/pgvector | Cloud Firestore initially; optionally Firestore vector search/Vertex AI Vector Search later |
-| Ollama chat | Gemini API `gemini-2.5-flash` |
+| Ollama chat | Gemini API `gemini-3.6-flash` |
 | Ollama embeddings | Gemini Embedding API |
 | `.env.local` | Secret Manager plus Cloud Run environment variables |
 | Docker Compose | Cloud Run services and managed dependencies |
@@ -52,6 +52,7 @@ The challenge instructions require a Google Cloud project with billing enabled. 
 10. Build the frontend with `VITE_AUTH_MODE=firebase`, Firebase public web config, and the HTTPS backend URL.
 11. Deploy frontend separately or serve it through an appropriate static/Cloud Run service.
 12. Add production domains to Firebase authorized domains and backend CORS.
+13. Assign Firebase custom claim `roles: ["journal-admin"]` only through a trusted Admin SDK/IAM-controlled process when an administrator is genuinely required; force token refresh after claim changes.
 
 ## Firestore rules and indexes
 

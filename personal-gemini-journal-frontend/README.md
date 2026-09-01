@@ -1,6 +1,6 @@
 # Personal Gemini Journal Frontend
 
-React 18/Vite client for daily reflection, private RAG, weekly insights, accountability, location pins, and privacy takeout. The component structure preserves the original warm off-white/sage journal design while separating authentication, API access, layout, journal, RAG, reflection, goal, and account features.
+React 18/Vite client for daily reflection, private hybrid RAG, a colorful memory calendar, weekly insights, accountability, location pins, RBAC visibility, and privacy takeout. The design uses bright violet, indigo, rose, amber, and teal accents while keeping long-form writing calm and readable.
 
 ## Stack
 
@@ -25,6 +25,7 @@ src/
 |   |-- auth/                     Login guard
 |   |-- layout/                   Header and view tabs
 |   |-- journal/                  Composer and entry feed
+|   |-- calendar/                 UID-scoped month grid and day previews
 |   |-- rag/                      Past-self conversation and references
 |   |-- reflection/               On-demand weekly insight view
 |   |-- accountability/           Dashboard/progress
@@ -72,6 +73,14 @@ Loads cursor pages from `/api/action-items`. Users can create their own `PENDING
 ### Weekly Reflection
 
 Sends the browser's IANA time-zone name to `/api/reflections/weekly` and renders grounded highlights, accomplishments, unresolved themes, and one suggested focus. Generation is user-triggered, shows the number of source entries, and has a no-entry state.
+
+### Memory Calendar
+
+Loads one selected local-calendar month from `/api/journal/calendar`. Colored day markers show entry counts, and selecting a day reveals journal, location label, and AI reflection previews. The backend derives the UID from the token and computes UTC boundaries from the browser's validated IANA time zone.
+
+### Roles and retrieval transparency
+
+The app loads `/api/user/me` after sign-in and displays the effective role. Every verified identity has `USER`; an identity-provider `journal-admin`/`admin` claim adds `ADMIN`. Admin status does not permit cross-user journal access. Past Self answers display `TEMPORAL SQL`, `LOCATION HYBRID`, `SEMANTIC HYBRID`, or `LEXICAL SQL FALLBACK` from the backend response.
 
 ### Privacy and deletion
 

@@ -12,6 +12,8 @@ docker compose --env-file .env.local ps
 
 Open `http://localhost:13000`. In the recommended Gemini mode, both generation and embeddings use Gemini and Ollama pulls no models. The `ollama` profile remains available for a fully local fallback.
 
+After sign-in, verify the normal user flow in this order: write an entry, wait for its reflection, open Memory Calendar, ask Past Self one temporal and one semantic question, accept a proposed goal, generate the weekly reflection, then export JSON.
+
 ### Gemini key for local development
 
 Create a key in Google AI Studio and put it only in the ignored root `.env.local` file:
@@ -120,6 +122,36 @@ Edit `BACKEND_HOST_PORT`, `FRONTEND_HOST_PORT`, or `POSTGRES_HOST_PORT` in `.env
 ### Keycloak redirect error
 
 Confirm the browser origin appears in `infra/keycloak/journal-realm.json`. Realm import uses `IGNORE_EXISTING`; changing the JSON does not modify an already-created Keycloak volume. Recreate only the Keycloak volume or update the local client through the admin console.
+
+### Local roles
+
+Every successfully verified account receives application role `USER`. To test the protected admin proof endpoint, open `http://localhost:8180/admin`, choose realm `journal`, select the user, open **Role mapping**, and assign realm role `journal-admin`. Sign out and sign in again so Keycloak issues a new token. The header then shows **Admin** and this request succeeds:
+
+```powershell
+# Use a current access token acquired through the normal browser/OIDC flow.
+Invoke-RestMethod http://localhost:18080/api/admin/status -Headers @{ Authorization = "Bearer $accessToken" }
+```
+
+A normal user receives `403`. Admin role never grants access to another user's entries; repository UID and RLS controls still apply.
+
+### Verify calendar and hybrid RAG
+
+Create entries such as:
+
+```text
+Studied Spring Security at the college library.  Location label: College Library
+Finished the RAG implementation at home.       Location label: Home
+```
+
+Then try:
+
+```text
+What did I do today?                  -> TEMPORAL_SQL
+Where did I study Spring Security?    -> LOCATION_HYBRID
+What technical work gave me confidence? -> SEMANTIC_HYBRID
+```
+
+The Past Self response shows the selected retrieval mode and referenced memories. If Gemini embedding quota returns `429`, the mode becomes `LEXICAL_SQL_FALLBACK`; reflection and journal persistence still complete.
 
 ### No local models
 

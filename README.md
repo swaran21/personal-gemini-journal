@@ -23,6 +23,9 @@ The project demonstrates that useful AI features do not require weakening owners
 - On-demand, grounded weekly reflections over one authenticated seven-day window.
 - Privacy takeout as streamed JSON or Markdown without embeddings or internal jobs.
 - Explicitly opt-in location pins that open through keyless Google Maps URLs.
+- Colorful month calendar with day-level private memory previews.
+- Trusted-claim RBAC (`USER` and `ADMIN`) without weakening per-UID journal ownership.
+- Explainable hybrid RAG that reports temporal SQL, location hybrid, semantic hybrid, or lexical fallback retrieval.
 - Local and cloud adapters behind the same application ports.
 - Responsive warm journal UI, secure session handling, CSP, and container health checks.
 
@@ -54,7 +57,7 @@ Spring Security -> FirebasePrincipal(subject/uid)
   |
   +-> ChatService -> JournalRepository (durable PENDING entry + outbox)
   |                    `-> background worker -> reflection + embedding + goal proposals
-  +-> RAG service -> temporal or private vector retrieval -> grounded Ollama / Gemini
+  +-> RAG service -> temporal SQL / location hybrid / vector + lexical fusion -> grounded Gemini
   |
   `-> JournalRepository -> PostgreSQL + pgvector / Firestore
                            `-> users are isolated by UID and RLS/path ownership
@@ -108,7 +111,7 @@ docker compose --env-file .env.local up -d --build
 docker compose --env-file .env.local ps
 ```
 
-The first start downloads the local chat and embedding models and can take several minutes. Healthy services are available at:
+The first start downloads local models only when `AI_GENERATION_PROVIDER=ollama`; Gemini mode starts without model downloads. Healthy services are available at:
 
 | Service | URL/port |
 |---|---|
@@ -148,8 +151,9 @@ All application routes require `Authorization: Bearer <access_token>`.
 |---|---|---|---|
 | POST | `/api/journal/entry` | `{ "content": "...", "location": { ... } }` | `202`; durable entry; location is optional |
 | GET | `/api/journal/entries?limit=20&cursor=...` | none | Cursor page of only the caller's entries |
+| GET | `/api/journal/calendar?year=2026&month=9&timeZone=Asia/Kolkata` | none | At most 100 owned entries in the selected local-calendar month |
 | POST | `/api/journal/entries/{id}/retry` | none | `202`; retries only an owned failed entry |
-| POST | `/api/chat/rag` | `{ "query": "...", "timeZone": "Asia/Kolkata", "history": [{ "role": "user" | "model", "text": "..." }] }` | Temporal/semantic grounded reply and timestamped references |
+| POST | `/api/chat/rag` | `{ "query": "...", "timeZone": "Asia/Kolkata", "history": [{ "role": "user" | "model", "text": "..." }] }` | Grounded reply, references, and `retrievalMode` |
 | POST | `/api/reflections/weekly` | `{ "timeZone": "Asia/Calcutta" }` | Grounded current-week patterns and focus |
 | GET | `/api/action-items?limit=50&cursor=...` | none | Cursor page of owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
 | POST | `/api/action-items` | `{ "goal": "..." }` | Creates an owned user-authored `PENDING` goal |
@@ -157,9 +161,22 @@ All application routes require `Authorization: Bearer <access_token>`.
 | DELETE | `/api/action-items/{id}` | none | Deletes an owned goal |
 | GET | `/api/user/export?format=json|markdown` | none | Streamed private data takeout attachment |
 | DELETE | `/api/account` | none | Permanently deletes caller-owned application data and cloud identity |
+| GET | `/api/user/me` | none | Verified subject and effective `USER`/`ADMIN` roles |
+| GET | `/api/admin/status` | none | Non-sensitive RBAC proof; requires `ADMIN` |
 | GET | `/actuator/health` | none | Public liveness/readiness endpoint |
 
 UID is intentionally absent from every request contract.
+
+## How hybrid memory retrieval behaves
+
+| Example question | Strategy | Why |
+|---|---|---|
+| "What did I do yesterday?" | `TEMPORAL_SQL` | Exact time range is more reliable than semantic similarity. |
+| "Where did I have pasta?" | `LOCATION_HYBRID` | Location-label text results are prioritized and fused with vector matches. |
+| "What helps me feel productive?" | `SEMANTIC_HYBRID` | Vector meaning and lexical matches are deduplicated into one evidence set. |
+| Any semantic question while embeddings return `429` | `LEXICAL_SQL_FALLBACK` | The private journal remains usable and AI reflection persistence is unaffected. |
+
+The UI displays this mode beside every Past Self answer. Every branch is bounded and scoped to the verified UID.
 
 ## Security design summary
 
