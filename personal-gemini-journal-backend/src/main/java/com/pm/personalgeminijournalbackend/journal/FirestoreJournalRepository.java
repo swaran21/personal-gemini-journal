@@ -65,6 +65,11 @@ public class FirestoreJournalRepository implements JournalRepository {
     }
     @Override public void setActionItemStatus(String uid, String id, ActionItem.Status status) { String valid = validId(id); wait(actionItems(uid).document(valid).update(Map.of("status", status.name(), "completed", status == ActionItem.Status.COMPLETED))); }
     @Override public void deleteActionItem(String uid, String id) { String valid = validId(id); wait(actionItems(uid).document(valid).delete()); }
+    @Override public void deleteAllUserData(String uid) {
+        deleteCollection(actionItems(uid));
+        deleteCollection(entries(uid));
+        wait(firestore.collection("users").document(uid).delete());
+    }
     private String validId(String id) { if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("Invalid document id"); return id; }
     private List<Double> embedding(Object value) { if (!(value instanceof List<?> values)) return List.of(); return values.stream().filter(Number.class::isInstance).map(Number.class::cast).map(Number::doubleValue).toList(); }
     private ActionItem.Status actionStatus(com.google.cloud.firestore.DocumentSnapshot document) {
@@ -84,4 +89,20 @@ public class FirestoreJournalRepository implements JournalRepository {
         return lm == 0d || rm == 0d ? -1d : dot / (Math.sqrt(lm) * Math.sqrt(rm));
     }
     private void wait(com.google.api.core.ApiFuture<?> future) { try { future.get(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); } catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); } }
+    private void deleteCollection(com.google.cloud.firestore.CollectionReference collection) {
+        while (true) {
+            try {
+                var documents = collection.limit(400).get().get().getDocuments();
+                if (documents.isEmpty()) return;
+                WriteBatch batch = firestore.batch();
+                documents.forEach(document -> batch.delete(document.getReference()));
+                wait(batch.commit());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Firestore deletion interrupted", e);
+            } catch (ExecutionException e) {
+                throw new IllegalStateException("Firestore deletion failed", e.getCause());
+            }
+        }
+    }
 }

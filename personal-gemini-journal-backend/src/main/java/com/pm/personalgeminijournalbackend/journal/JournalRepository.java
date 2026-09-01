@@ -19,4 +19,6 @@ public interface JournalRepository {
     List<JournalEntry> findRelevant(String uid, List<Double> queryEmbedding, int limit);
     void setActionItemStatus(String uid, String id, ActionItem.Status status);
     void deleteActionItem(String uid, String id);
+    /** Permanently deletes every application record owned by the authenticated UID. */
+    void deleteAllUserData(String uid);
 }

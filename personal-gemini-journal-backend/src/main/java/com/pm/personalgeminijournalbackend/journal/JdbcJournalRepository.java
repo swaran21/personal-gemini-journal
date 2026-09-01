@@ -87,6 +87,13 @@ public class JdbcJournalRepository implements JournalRepository {
         if (changed == 0) throw new NoSuchElementException("Action item not found");
     }
 
+    @Override @Transactional public void deleteAllUserData(String uid) {
+        scope(uid);
+        jdbc.sql("DELETE FROM action_items WHERE user_id=:uid").param("uid", uid).update();
+        // journal_entries cascades to the internal processing outbox.
+        jdbc.sql("DELETE FROM journal_entries WHERE user_id=:uid").param("uid", uid).update();
+    }
+
     private void scope(String uid) { jdbc.sql("SELECT set_config('app.current_user_id', :uid, true)").param("uid", uid).query(String.class).single(); }
     private int bounded(int value) { return Math.max(1, Math.min(value, 100)); }
     private UUID uuid(String value) { try { return UUID.fromString(value); } catch (RuntimeException exception) { throw new IllegalArgumentException("Invalid document id"); } }
