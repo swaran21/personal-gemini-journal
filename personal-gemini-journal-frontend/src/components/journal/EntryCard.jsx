@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { api } from '../../api/client';
 import { dayLabel, timeLabel } from '../../utils/date';
 
-export function EntryCard({ entry, onRetry, onChanged = () => {}, onDeleted = () => {}, setError = () => {} }) {
+export function EntryCard({ entry, onRetry, onChanged = () => window.location.reload(), onDeleted = () => window.location.reload(), setError = () => {} }) {
   const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(entry.content); const [saving, setSaving] = useState(false);
   const save = async () => { const value = draft.trim(); if (!value || saving) return; setSaving(true); setError(''); try { const updated = await api(`/api/journal/entries/${encodeURIComponent(entry.id)}`, { method: 'PATCH', body: JSON.stringify({ content: value, location: entry.location || undefined }) }); onChanged(updated); setEditing(false); } catch (e) { setError(e.message); } finally { setSaving(false); } };
   const remove = async () => { if (saving || !window.confirm('Delete this journal entry permanently?')) return; setSaving(true); setError(''); try { await api(`/api/journal/entries/${encodeURIComponent(entry.id)}`, { method: 'DELETE' }); onDeleted(entry.id); } catch (e) { setError(e.message); } finally { setSaving(false); } };
