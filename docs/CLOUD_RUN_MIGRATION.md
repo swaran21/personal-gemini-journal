@@ -70,7 +70,7 @@ $backendImage = "$region-docker.pkg.dev/$projectId/$repository/backend:v1"
 $frontendImage = "$region-docker.pkg.dev/$projectId/$repository/frontend:v1"
 
 gcloud config set project $projectId
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com firestore.googleapis.com firebase.googleapis.com
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com firestore.googleapis.com firebase.googleapis.com generativelanguage.googleapis.com
 gcloud iam service-accounts create $runtimeAccountName --display-name="Personal Gemini Journal runtime"
 gcloud artifacts repositories create $repository --repository-format=docker --location=$region
 gcloud auth configure-docker "$region-docker.pkg.dev"
