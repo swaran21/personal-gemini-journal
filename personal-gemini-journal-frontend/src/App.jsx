@@ -17,6 +17,7 @@ export default function App() {
   const [view, setView] = useState('journal');
   const [entries, setEntries] = useState([]);
   const [actionItems, setActionItems] = useState([]);
+  const [ragMessages, setRagMessages] = useState([]);
   const [entryPage, setEntryPage] = useState({ nextCursor: null, hasMore: false });
   const [actionPage, setActionPage] = useState({ nextCursor: null, hasMore: false });
   const [loading, setLoading] = useState(false);
@@ -64,6 +65,8 @@ export default function App() {
     return () => unsubscribe();
   }, [loadData]);
 
+  useEffect(() => { setRagMessages([]); }, [user?.uid, user?.id, user?.sub]);
+
   if (!authReady) return <PageLoader fullScreen />;
   if (!user) return <LoginScreen initialError={error} />;
 
@@ -73,7 +76,7 @@ export default function App() {
       <ViewTabs view={view} setView={setView} />
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
       {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshEntries={refreshEntries} refreshItems={refreshActionItems} loading={loading} setError={setError} hasMore={entryPage.hasMore} loadMore={async () => { try { const page = await api(`/api/journal/entries?limit=20&cursor=${encodeURIComponent(entryPage.nextCursor)}`); setEntries((current) => [...current, ...page.items]); setEntryPage(page); } catch (requestError) { setError(requestError.message); } }} />}
-      {view === 'rag' && <RagView setError={setError} />}
+      {view === 'rag' && <RagView messages={ragMessages} setMessages={setRagMessages} setError={setError} />}
       {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} hasMore={actionPage.hasMore} loadMore={async () => { try { const page = await api(`/api/action-items?limit=50&cursor=${encodeURIComponent(actionPage.nextCursor)}`); setActionItems((current) => [...current, ...page.items]); setActionPage(page); } catch (requestError) { setError(requestError.message); } }} />}
       {view === 'weekly' && <WeeklyReflectionView setError={setError} />}
     </main>

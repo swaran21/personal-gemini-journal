@@ -7,6 +7,6 @@ import com.pm.personalgeminijournalbackend.reflection.WeeklyReflection;
 public interface GenerativeAiService {
     GeminiResult reflect(String entry, List<JournalEntry> history);
     List<String> extractActionItems(String entry);
-    String answerWithGrounding(String question, List<JournalEntry> entries);
+    String answerWithGrounding(RagContext context);
     WeeklyReflection generateWeeklyReflection(List<JournalEntry> entries);
 }

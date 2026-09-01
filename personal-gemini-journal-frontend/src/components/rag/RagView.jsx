@@ -4,9 +4,8 @@ import { api } from '../../api/client';
 import { EmptyState } from '../common/EmptyState';
 import { RagReply } from './RagReply';
 
-export function RagView({ setError }) {
+export function RagView({ messages, setMessages, setError }) {
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState([]);
   const [asking, setAsking] = useState(false);
 
   const ask = async (event) => {
@@ -15,10 +14,18 @@ export function RagView({ setError }) {
     if (!value || asking) return;
     setAsking(true);
     setError('');
+    const history = messages.slice(-10).map((message) => ({
+      role: message.role === 'user' ? 'USER' : 'ASSISTANT',
+      content: message.role === 'user' ? message.text : message.reply,
+    }));
     setMessages((current) => [...current, { role: 'user', text: value }]);
     setQuery('');
     try {
-      const result = await api('/api/chat/rag', { method: 'POST', body: JSON.stringify({ query: value }) });
+      const result = await api('/api/chat/rag', { method: 'POST', body: JSON.stringify({
+        query: value,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        history,
+      }) });
       setMessages((current) => [...current, { role: 'assistant', ...result }]);
     } catch (requestError) {
       setMessages((current) => current.slice(0, -1));

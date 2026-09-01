@@ -3,6 +3,8 @@ package com.pm.personalgeminijournalbackend.gemini;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pm.personalgeminijournalbackend.config.ApplicationConfig;
 import com.pm.personalgeminijournalbackend.config.GeminiApiKeyProvider;
+import com.pm.personalgeminijournalbackend.chat.ChatTurn;
+import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -11,13 +13,18 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.time.Instant;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 
 class GeminiServiceTest {
     private MockRestServiceServer server;
@@ -39,6 +46,20 @@ class GeminiServiceTest {
                 .andRespond(withSuccess("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{\\\"reply\\\":\\\"You made meaningful progress today.\\\"}\"}]}}]}", MediaType.APPLICATION_JSON));
 
         assertEquals("You made meaningful progress today.", service.reflect("private entry", List.of()).reply());
+        server.verify();
+    }
+
+    @Test void ragPromptIncludesTimestampsTemporalScopeAndBoundedConversation() {
+        JournalEntry entry = new JournalEntry("id", "Built the RAG application", "You made progress",
+                Instant.parse("2026-09-01T10:00:00Z"), List.of(), JournalEntry.ProcessingStatus.COMPLETED, null);
+        RagContext context = new RagContext("What did I do today?", List.of(entry),
+                List.of(new ChatTurn(ChatTurn.Role.USER, "What did I learn?"), new ChatTurn(ChatTurn.Role.ASSISTANT, "You learned RAG.")),
+                Instant.parse("2026-09-01T12:00:00Z"), ZoneId.of("Asia/Kolkata"), "today");
+        server.expect(once(), requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"))
+                .andExpect(content().string(allOf(containsString("Retrieval scope: today"), containsString("Built the RAG application"), containsString("What did I learn?"), containsString("2026-09-01T15:30+05:30"))))
+                .andRespond(withSuccess("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"You built the RAG application.\"}]}}]}", MediaType.APPLICATION_JSON));
+
+        assertEquals("You built the RAG application.", service.answerWithGrounding(context));
         server.verify();
     }
 }
