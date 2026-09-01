@@ -1,6 +1,6 @@
 # Personal Gemini Journal Frontend
 
-React 18/Vite client for daily reflection, private hybrid RAG, a colorful memory calendar, weekly insights, accountability, location pins, RBAC visibility, and privacy takeout. The design uses bright violet, indigo, rose, amber, and teal accents while keeping long-form writing calm and readable.
+React 18/Vite client for daily reflection, private hybrid RAG, a colorful memory calendar, weekly insights, accountability, location pins, RBAC visibility, and privacy takeout. The visual system uses Google-inspired blue, red, yellow, and green accents while keeping blue as the primary interaction color and long-form writing calm and readable.
 
 ## Stack
 

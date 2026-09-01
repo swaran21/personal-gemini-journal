@@ -125,7 +125,7 @@ Confirm the browser origin appears in `infra/keycloak/journal-realm.json`. Realm
 
 ### Local roles
 
-Every successfully verified account receives application role `USER`. To test the protected admin proof endpoint, open `http://localhost:8180/admin`, choose realm `journal`, select the user, open **Role mapping**, and assign realm role `journal-admin`. Sign out and sign in again so Keycloak issues a new token. The header then shows **Admin** and this request succeeds:
+Every successfully verified account receives application role `USER`. To test the protected admin proof endpoint, open `http://localhost:8180/admin`, choose realm `journal`, select the user, open **Role mapping**, and assign realm role `journal-admin`. If this Docker volume existed before roles were added, create the `journal-admin` realm role first: Keycloak imports use `IGNORE_EXISTING`, so editing the realm JSON never rewrites an existing realm. Sign out and sign in again so Keycloak issues a new token. The header then shows **Admin** and this request succeeds:
 
 ```powershell
 # Use a current access token acquired through the normal browser/OIDC flow.

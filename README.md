@@ -27,7 +27,7 @@ The project demonstrates that useful AI features do not require weakening owners
 - Trusted-claim RBAC (`USER` and `ADMIN`) without weakening per-UID journal ownership.
 - Explainable hybrid RAG that reports temporal SQL, location hybrid, semantic hybrid, or lexical fallback retrieval.
 - Local and cloud adapters behind the same application ports.
-- Responsive warm journal UI, secure session handling, CSP, and container health checks.
+- Responsive Google-inspired blue/red/yellow/green journal UI, secure session handling, CSP, and container health checks.
 
 ## Repository layout
 
