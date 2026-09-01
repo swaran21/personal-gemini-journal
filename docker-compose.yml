@@ -49,8 +49,9 @@ services:
     image: ollama/ollama:0.11.4
     environment:
       OLLAMA_HOST: http://ollama:11434
+      AI_GENERATION_PROVIDER: ${AI_GENERATION_PROVIDER:-ollama}
     entrypoint: ["/bin/sh", "-c"]
-    command: ["sleep 5; ollama pull ${OLLAMA_CHAT_MODEL:-gemma3:1b}; ollama pull ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"]
+    command: ["sleep 5; ollama pull ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}; if [ \"${AI_GENERATION_PROVIDER:-ollama}\" = \"ollama\" ]; then ollama pull ${OLLAMA_CHAT_MODEL:-gemma3:1b}; fi"]
     depends_on:
       - ollama
     restart: "no"
