@@ -49,7 +49,7 @@ class ChatServiceTest {
   JournalEntry entry = new JournalEntry("entry-1", "I enjoyed a morning run", "Nice work", java.time.Instant.now(), List.of(0.1, 0.2), JournalEntry.ProcessingStatus.COMPLETED, null);
   when(embeddings.embed("What helped my running habit?")).thenReturn(List.of(0.1, 0.2)); when(repo.findRelevant("uid-1", List.of(0.1, 0.2), 5)).thenReturn(List.of(entry)); when(gemini.answerWithGrounding(any(RagContext.class))).thenReturn("Your past entry points to morning runs.");
   RagChatResponse response = service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "What helped my running habit?");
-  assertTrue(response.referencedEntries().get(0).endsWith("I enjoyed a morning run")); verify(repo, never()).findRelevant(eq("other-user"), anyList(), anyInt());
+  assertTrue(response.referencedEntries().get(0).endsWith("I enjoyed a morning run")); assertEquals("SEMANTIC_HYBRID", response.retrievalMode()); verify(repo, never()).findRelevant(eq("other-user"), anyList(), anyInt());
  }
 
  @Test void ragSanitizesQuestionAndBoundsReferencedExcerpt() {
@@ -82,6 +82,7 @@ class ChatServiceTest {
   RagChatResponse response = service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", new RagChatRequest("What did I do today?", "Asia/Kolkata", List.of()));
 
   assertEquals("You built a RAG application.", response.reply());
+  assertEquals("TEMPORAL_SQL", response.retrievalMode());
   verify(repo).entriesBetween("uid-1", Instant.parse("2026-08-31T18:30:00Z"), Instant.parse("2026-09-01T12:00:00Z"), 100);
   verifyNoInteractions(embeddings);
   verify(repo, never()).entriesBetween(eq("other-user"), any(), any(), anyInt());
@@ -106,7 +107,9 @@ class ChatServiceTest {
   when(embeddings.embed("Where did I go near Cubbon Park?")).thenThrow(new IllegalStateException("quota"));
   when(repo.findTextRelevant("uid-1", "Where did I go near Cubbon Park?", 5)).thenReturn(List.of(entry));
   when(gemini.answerWithGrounding(any(RagContext.class))).thenReturn("You were near Cubbon Park.");
-  assertEquals("You were near Cubbon Park.", service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "Where did I go near Cubbon Park? ").reply());
+  RagChatResponse response = service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "Where did I go near Cubbon Park? ");
+  assertEquals("You were near Cubbon Park.", response.reply());
+  assertEquals("LEXICAL_SQL_FALLBACK", response.retrievalMode());
   verify(repo).findTextRelevant("uid-1", "Where did I go near Cubbon Park?", 5);
  }
 }

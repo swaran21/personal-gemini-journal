@@ -9,6 +9,8 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Arrays;
+import java.util.Locale;
 import java.util.UUID;
 
 @Repository
@@ -132,8 +134,13 @@ public class JdbcJournalRepository implements JournalRepository {
 
     @Override @Transactional(readOnly = true) public List<JournalEntry> findTextRelevant(String uid, String query, int limit) {
         scope(uid);
-        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid AND to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(location_label,'')) @@ plainto_tsquery('simple', :query) ORDER BY created_at DESC,id DESC LIMIT :limit")
-                .param("uid", uid).param("query", query).param("limit", Math.max(1, Math.min(limit, 10))).query((rs, row) -> entry(rs, List.of())).list();
+        List<String> terms = Arrays.stream(query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
+                .filter(term -> term.length() > 2).filter(term -> !TEXT_STOP_WORDS.contains(term)).distinct().toList();
+        if (terms.isEmpty()) return List.of();
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid ORDER BY created_at DESC,id DESC LIMIT 100")
+                .param("uid", uid).query((rs, row) -> entry(rs, List.of())).list().stream()
+                .filter(entry -> terms.stream().anyMatch(term -> searchable(entry).contains(term)))
+                .limit(Math.max(1, Math.min(limit, 10))).toList();
     }
 
     @Override @Transactional public void setActionItemStatus(String uid, String id, ActionItem.Status status) {
@@ -160,6 +167,8 @@ public class JdbcJournalRepository implements JournalRepository {
     private int bounded(int value) { return Math.max(1, Math.min(value, 100)); }
     private UUID uuid(String value) { try { return UUID.fromString(value); } catch (RuntimeException exception) { throw new IllegalArgumentException("Invalid document id"); } }
     private String vector(List<Double> values) { if (values == null || values.isEmpty()) throw new IllegalArgumentException("Embedding must not be empty"); return values.toString(); }
+    private static final java.util.Set<String> TEXT_STOP_WORDS = java.util.Set.of("what", "when", "where", "which", "with", "from", "about", "have", "this", "that", "were", "did", "near", "into", "your", "mine");
+    private String searchable(JournalEntry entry) { return (entry.text() + " " + (entry.location() == null ? "" : entry.location().label())).toLowerCase(Locale.ROOT); }
     private JournalEntry entry(java.sql.ResultSet rs, List<Double> embedding) throws java.sql.SQLException {
         return new JournalEntry(
                 rs.getObject("id", UUID.class).toString(), rs.getString("content"), rs.getString("ai_response"),

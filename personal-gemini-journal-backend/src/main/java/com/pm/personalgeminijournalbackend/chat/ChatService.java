@@ -12,6 +12,9 @@ import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 
 @Service
 public class ChatService {
@@ -41,12 +44,10 @@ public class ChatService {
         String question = sanitize(request.question());
         ZoneId zone = parseZone(request.timeZone());
         var timeRange = temporalQueries.resolve(question, zone);
-        var entries = timeRange
-                .map(range -> journalRepository.entriesBetween(uid, range.startInclusive(), range.endExclusive(), 100))
-                .orElseGet(() -> {
-                    try { return journalRepository.findRelevant(uid, embeddings.embed(question), 5); }
-                    catch (RuntimeException embeddingFailure) { return journalRepository.findTextRelevant(uid, question, 5); }
-                });
+        RetrievalResult retrieval = timeRange
+                .map(range -> new RetrievalResult(journalRepository.entriesBetween(uid, range.startInclusive(), range.endExclusive(), 100), "TEMPORAL_SQL"))
+                .orElseGet(() -> retrieveHybrid(uid, question));
+        var entries = retrieval.entries();
         List<ChatTurn> conversation = request.history().stream()
                 .limit(10)
                 .map(message -> new ChatTurn(message.role() == RagChatRequest.Role.USER ? ChatTurn.Role.USER : ChatTurn.Role.ASSISTANT, sanitize(message.content())))
@@ -54,7 +55,7 @@ public class ChatService {
         String reply = gemini.answerWithGrounding(new RagContext(question, entries, conversation,
                 temporalQueries.now(), zone, timeRange.map(TemporalQueryResolver.TimeRange::label).orElse(null)));
         var references = entries.stream().map(entry -> "[" + REFERENCE_TIME.withZone(zone).format(entry.createdAt()) + "] " + excerpt(entry.text())).toList();
-        return new RagChatResponse(reply, references);
+        return new RagChatResponse(reply, references, retrieval.mode());
     }
 
     public JournalEntryResponse retryJournalEntry(String uid, String entryId) {
@@ -76,6 +77,34 @@ public class ChatService {
         if (location == null || location.label() == null || location.label().isBlank()) return entry;
         return entry + "\nLocation: " + location.label().trim();
     }
+
+    private RetrievalResult retrieveHybrid(String uid, String question) {
+        boolean locationQuestion = isLocationQuestion(question);
+        List<com.pm.personalgeminijournalbackend.journal.JournalEntry> lexical = journalRepository.findTextRelevant(uid, question, 5);
+        try {
+            List<com.pm.personalgeminijournalbackend.journal.JournalEntry> vector = journalRepository.findRelevant(uid, embeddings.embed(question), 5);
+            return new RetrievalResult(merge(locationQuestion ? lexical : vector, locationQuestion ? vector : lexical, 5),
+                    locationQuestion ? "LOCATION_HYBRID" : "SEMANTIC_HYBRID");
+        } catch (RuntimeException embeddingFailure) {
+            return new RetrievalResult(lexical, "LEXICAL_SQL_FALLBACK");
+        }
+    }
+
+    private List<com.pm.personalgeminijournalbackend.journal.JournalEntry> merge(
+            List<com.pm.personalgeminijournalbackend.journal.JournalEntry> primary,
+            List<com.pm.personalgeminijournalbackend.journal.JournalEntry> secondary, int limit) {
+        LinkedHashMap<String, com.pm.personalgeminijournalbackend.journal.JournalEntry> unique = new LinkedHashMap<>();
+        new ArrayList<>(primary).forEach(entry -> unique.putIfAbsent(entry.id(), entry));
+        new ArrayList<>(secondary).forEach(entry -> unique.putIfAbsent(entry.id(), entry));
+        return unique.values().stream().limit(limit).toList();
+    }
+
+    private boolean isLocationQuestion(String question) {
+        String normalized = question.toLowerCase(Locale.ROOT);
+        return normalized.matches(".*\\b(where|location|place|near|visited|went)\\b.*");
+    }
+
+    private record RetrievalResult(List<com.pm.personalgeminijournalbackend.journal.JournalEntry> entries, String mode) { }
 
     private String sanitize(String value) {
         String result = value.replace("\u0000", "").trim();
