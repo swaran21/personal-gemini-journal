@@ -4,6 +4,7 @@ import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
 import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.*;
 import java.time.temporal.TemporalAdjusters;
@@ -15,6 +16,7 @@ public class WeeklyReflectionService {
     private final GenerativeAiService ai;
     private final Clock clock;
 
+    @Autowired
     public WeeklyReflectionService(JournalRepository repository, GenerativeAiService ai) { this(repository, ai, Clock.systemUTC()); }
     WeeklyReflectionService(JournalRepository repository, GenerativeAiService ai, Clock clock) { this.repository = repository; this.ai = ai; this.clock = clock; }
 

@@ -1,6 +1,7 @@
 package com.pm.personalgeminijournalbackend.journal;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 
@@ -9,6 +10,7 @@ public class ActionItemService {
     private final JournalRepository repository;
     private final Clock clock;
 
+    @Autowired
     public ActionItemService(JournalRepository repository) {
         this(repository, Clock.systemUTC());
     }
