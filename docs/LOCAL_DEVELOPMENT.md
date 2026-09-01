@@ -181,7 +181,7 @@ If processing reaches `FAILED`, use **Try reflection again** in the journal feed
 
 ### HTTP 429 responses
 
-Local per-user quotas default to 30 journal writes/hour, 20 RAG queries/hour, and 120 other API calls/minute. A rejected request includes `Retry-After`. Adjust the three rate-limit variables in `.env.local`, then recreate the backend container so Compose loads the new environment.
+Local per-user quotas default to 30 journal writes/hour, 20 RAG queries/hour, 120 other API calls/minute, and 12 location-bearing writes/hour. A rejected request includes `Retry-After`. Adjust `JOURNAL_WRITES_PER_HOUR`, `RAG_QUERIES_PER_HOUR`, `API_REQUESTS_PER_MINUTE`, or `LOCATION_PINS_PER_HOUR` in `.env.local`, then recreate the backend container so Compose loads the new environment. Location capture uses the browser only after a click; the current application opens pins with keyless Google Maps URLs and makes no billed Maps API calls.
 
 ### Delete local journal data
 

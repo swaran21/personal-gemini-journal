@@ -2,9 +2,11 @@ package com.pm.personalgeminijournalbackend.journal;
 
 import com.pm.personalgeminijournalbackend.chat.ChatService;
 import com.pm.personalgeminijournalbackend.security.FirebasePrincipal;
+import com.pm.personalgeminijournalbackend.security.LocationPinRateLimiter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -17,9 +19,12 @@ import java.time.ZoneId;
 public class JournalEntryController {
     private final ChatService chatService;
     private final JournalRepository repository;
-    public JournalEntryController(ChatService chatService, JournalRepository repository) { this.chatService = chatService; this.repository = repository; }
+    private final LocationPinRateLimiter locationPinRateLimiter;
+    public JournalEntryController(ChatService chatService, JournalRepository repository) { this(chatService, repository, new LocationPinRateLimiter(12)); }
+    @Autowired public JournalEntryController(ChatService chatService, JournalRepository repository, LocationPinRateLimiter locationPinRateLimiter) { this.chatService = chatService; this.repository = repository; this.locationPinRateLimiter = locationPinRateLimiter; }
     @PostMapping("/entry") public ResponseEntity<JournalEntryResponse> create(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody JournalEntryRequest request) {
         GeoLocation location = request.location() == null ? null : request.location().toLocation();
+        if (location != null) locationPinRateLimiter.check(principal.uid());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.processJournalEntry(principal.uid(), request.content(), location));
     }
     @GetMapping("/entries") public PageSlice<JournalEntryResponse> entries(
@@ -44,6 +49,7 @@ public class JournalEntryController {
     }
     @PatchMapping("/entries/{id}") public ResponseEntity<JournalEntryResponse> edit(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id, @Valid @RequestBody JournalEntryRequest request) {
         GeoLocation location = request.location() == null ? null : request.location().toLocation();
+        if (location != null) locationPinRateLimiter.check(principal.uid());
         JournalEntry updated = repository.updateEntryContent(principal.uid(), id, request.content().trim(), location, java.time.Instant.now());
         chatService.dispatchUpdatedEntry(principal.uid(), updated);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response(updated));

@@ -60,7 +60,7 @@ The frontend never sends a UID.
 
 The textarea is capped at 10,000 characters and preserves the draft after failure. Submission saves immediately; the new entry renders with a background-processing indicator while the feed polls boundedly for completion. A provider failure never removes the journal text and exposes a safe retry control using the stored entry ID rather than resending content from the browser. The feed uses opaque cursor pagination.
 
-Location is optional. Browser geolocation runs only after **Add current location**, permission denial does not block saving, and the approved pin can be opened through a keyless Google Maps URL. No Maps key is embedded in the application.
+Location is optional. Browser geolocation runs only after **Add current location**, permission denial does not block saving, and the approved pin can be opened through a keyless Google Maps URL. No Maps key is embedded in the application and no Maps Platform request is made. The UI has a one-minute geolocation cooldown and the API independently limits location-bearing writes to 12 per verified user per hour by default (`LOCATION_PINS_PER_HOUR`).
 
 ### Chat with Past Self
 

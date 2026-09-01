@@ -24,4 +24,9 @@ public class RateLimitConfig {
         registration.setEnabled(false);
         return registration;
     }
+
+    @Bean
+    LocationPinRateLimiter locationPinRateLimiter(@Value("${app.rate-limit.location-pins-per-hour:12}") int locationPins) {
+        return new LocationPinRateLimiter(locationPins);
+    }
 }

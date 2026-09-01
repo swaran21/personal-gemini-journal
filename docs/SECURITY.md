@@ -82,6 +82,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Account deletion accepts no UID and removes only records owned by the verified principal.
 - Takeout accepts no UID, streams only user-visible owned records, sends `Cache-Control: no-store`, and excludes embeddings/internal jobs.
 - Browser geolocation requires an explicit click; location denial does not block entry creation.
+- Location-bearing create/edit requests have a separate verified-UID quota (12/hour by default), in addition to the journal-write quota. The browser also cools down geolocation prompts for one minute. Neither mechanism calls Google Maps Platform.
 - Frontend and backend run as non-root container users and have health checks.
 
 ## Abuse cases and expected result
