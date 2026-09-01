@@ -21,8 +21,9 @@ Create a key in Google AI Studio and put it only in the ignored root `.env.local
 ```text
 AI_GENERATION_PROVIDER=gemini
 GEMINI_API_KEY=<paste the key here>
-GEMINI_MODEL=gemini-3.6-flash
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 GEMINI_EMBEDDING_DIMENSIONS=768
 ```
 
@@ -32,7 +33,7 @@ Never use a `VITE_*` variable for this key: Vite variables are downloadable by e
 docker compose --env-file .env.local up -d --build --force-recreate backend
 ```
 
-The key is used for journal reflection, RAG answer generation, weekly reflection, action-item extraction, and embeddings. `gemini-embedding-001` is requested at 768 dimensions to match the local pgvector schema and is normalized before cosine search. To run without any external AI request, set `AI_GENERATION_PROVIDER=ollama` and leave `GEMINI_API_KEY` empty; the smaller local model will usually produce less capable summaries.
+The key is used for journal reflection, RAG answer generation, weekly reflection, action-item proposals, and embeddings. Reflection and proposals are one structured Gemini request, so a goal proposal cannot fail independently after a successful reflection. `gemini-3.5-flash-lite` retries once on `gemini-3.1-flash-lite` only after a provider `429`; other provider failures preserve the entry and follow normal outbox retry behavior. `gemini-embedding-2` is requested at 768 dimensions to match the local pgvector schema and is normalized before cosine search. To run without any external AI request, set `AI_GENERATION_PROVIDER=ollama` and leave `GEMINI_API_KEY` empty; the smaller local model will usually produce less capable summaries.
 
 Useful checks:
 
@@ -74,8 +75,9 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=gemma3:1b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 GEMINI_API_KEY=<your Google AI Studio key>
-GEMINI_MODEL=gemini-3.6-flash
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 GEMINI_EMBEDDING_DIMENSIONS=768
 CORS_ALLOWED_ORIGINS=http://localhost:13000,http://localhost:3000
 JOURNAL_WRITES_PER_HOUR=30

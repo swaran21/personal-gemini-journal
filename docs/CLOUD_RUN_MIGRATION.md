@@ -32,7 +32,7 @@ The challenge instructions require a Google Cloud project with billing enabled. 
 |---|---|
 | Keycloak | Firebase Authentication with Google provider |
 | PostgreSQL/pgvector | Cloud Firestore initially; optionally Firestore vector search/Vertex AI Vector Search later |
-| Ollama chat | Gemini API `gemini-3.6-flash` |
+| Ollama chat | Gemini API `gemini-3.5-flash-lite`, with `gemini-3.1-flash-lite` rate-limit fallback |
 | Ollama embeddings | Gemini Embedding API |
 | `.env.local` | Secret Manager plus Cloud Run environment variables |
 | Docker Compose | Cloud Run services and managed dependencies |
@@ -103,7 +103,7 @@ gcloud run deploy $backendService `
   --max-instances=2 `
   --timeout=300 `
   --labels=dev-tutorial=cloud-run-ai-challenge `
-  --set-env-vars="SPRING_PROFILES_ACTIVE=cloud,GOOGLE_CLOUD_PROJECT=$projectId,FIRESTORE_DATABASE_ID=(default),GEMINI_API_KEY_SECRET=projects/$projectId/secrets/gemini-api-key/versions/latest,GEMINI_MODEL=gemini-3.6-flash,GEMINI_EMBEDDING_MODEL=gemini-embedding-001,GEMINI_EMBEDDING_DIMENSIONS=768,CORS_ALLOWED_ORIGINS=https://temporary.invalid"
+  --set-env-vars="SPRING_PROFILES_ACTIVE=cloud,GOOGLE_CLOUD_PROJECT=$projectId,FIRESTORE_DATABASE_ID=(default),GEMINI_API_KEY_SECRET=projects/$projectId/secrets/gemini-api-key/versions/latest,GEMINI_MODEL=gemini-3.5-flash-lite,GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite,GEMINI_EMBEDDING_MODEL=gemini-embedding-2,GEMINI_EMBEDDING_DIMENSIONS=768,CORS_ALLOWED_ORIGINS=https://temporary.invalid"
 
 $backendUrl = gcloud run services describe $backendService --region=$region --format="value(status.url)"
 ```

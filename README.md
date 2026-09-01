@@ -15,6 +15,8 @@ The project demonstrates that useful AI features do not require weakening owners
 - Vector embeddings stored with every entry.
 - "Chat with Past Self" using private similarity retrieval and grounded generation.
 - Persistence-first journal writes: HTTP 202 after durable save, then background reflection, embedding, and goal extraction.
+- One structured Gemini reflection call returns both empathy and 0-3 user-confirmable goal proposals, reducing quota use and preventing a second extraction call from failing independently.
+- Gemini generation uses `gemini-3.5-flash-lite`; a `429` rate limit retries once on configurable `gemini-3.1-flash-lite`. Other provider failures are not retried on a second model.
 - Durable local processing outbox with bounded retry, stale-job reclamation, and user-triggered retry after terminal AI failure.
 - User-confirmed AI goal proposals; model suggestions never become commitments without approval.
 - Authenticated per-user quotas for journal writes, RAG, and ordinary API traffic.
@@ -69,8 +71,8 @@ Spring profiles select adapters:
 |---|---|---|
 | Authentication | Keycloak OIDC JWT | Firebase ID token verification |
 | Persistence | PostgreSQL 16 + pgvector | Cloud Firestore |
-| AI | Gemini `gemini-3.6-flash` with `gemini` profile; Ollama fallback | Gemini `gemini-3.6-flash` |
-| Embeddings | Gemini `gemini-embedding-001`, normalized to 768 dimensions | Gemini `gemini-embedding-001` |
+| AI | Gemini `gemini-3.5-flash-lite`, then `gemini-3.1-flash-lite` only on `429`; Ollama fallback | Same Flash-only Gemini policy |
+| Embeddings | Gemini `gemini-embedding-2`, normalized to 768 dimensions | Gemini `gemini-embedding-2` |
 | Secrets | Ignored `.env.local` | Google Secret Manager + workload identity |
 | Background AI | Transactional outbox worker | Spring `@Async` adapter (managed queue planned) |
 
@@ -101,7 +103,8 @@ DB_ADMIN_PASSWORD=
 KEYCLOAK_ADMIN_PASSWORD=
 AI_GENERATION_PROVIDER=gemini
 GEMINI_API_KEY=<your Google AI Studio key>
-GEMINI_MODEL=gemini-3.6-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
 ```
 
 Start the stack:
