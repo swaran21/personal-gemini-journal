@@ -44,13 +44,14 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Structured AI JSON is parsed, deduplicated, count-limited, and length-limited.
 - React renders response text through JSX, not `dangerouslySetInnerHTML`.
 - RAG reference excerpts are capped at 500 characters.
+- RAG chat history is session-scoped, cleared when the authenticated subject changes, and bounded to 10 validated turns; it contains no client-supplied UID.
 - Pagination limits and opaque cursors are validated; keyset queries remain UID-scoped.
 - Coordinates must be finite and within geographic ranges; labels are plain text and capped at 200 characters.
 
 ### Secrets
 
 - `.env.local`, service-account JSON, build output, and dependency directories are ignored.
-- Local secrets are environment values and are not built into images.
+- Local secrets are environment values in ignored `.env.local`/IDE configuration and are not built into images. Hybrid local mode reads `GEMINI_API_KEY` only in the backend process.
 - The backend never receives the PostgreSQL bootstrap password.
 - Cloud uses Application Default Credentials/workload identity and Secret Manager.
 - Gemini API keys are server-side only and sent in `x-goog-api-key`, not URL query strings.
@@ -72,6 +73,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Journal text is committed before AI processing; provider downtime cannot reject or erase the entry.
 - Authenticated quotas use the verified UID and return `429` with `Retry-After`.
 - AI-created goals remain `PROPOSED` until the user accepts or dismisses them.
+- User-authored goals are created as `PENDING` only below the verified principal's ownership scope.
 - Account deletion accepts no UID and removes only records owned by the verified principal.
 - Takeout accepts no UID, streams only user-visible owned records, sends `Cache-Control: no-store`, and excludes embeddings/internal jobs.
 - Browser geolocation requires an explicit click; location denial does not block entry creation.

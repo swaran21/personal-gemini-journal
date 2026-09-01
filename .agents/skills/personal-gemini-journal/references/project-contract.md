@@ -4,7 +4,8 @@
 
 - `personal-gemini-journal-backend/`: Spring Boot 3 API.
 - `personal-gemini-journal-frontend/`: React/Vite UI.
-- `local`: Keycloak, PostgreSQL/pgvector, Ollama, transactional outbox.
+- `local,gemini` (recommended development mode): Keycloak, PostgreSQL/pgvector, Gemini generation, local Ollama embeddings, transactional outbox.
+- `local`: fully local Keycloak, PostgreSQL/pgvector, Ollama generation and embeddings, transactional outbox.
 - `cloud`: Firebase token verification, Firestore, Gemini, Secret Manager; Cloud Run deployment remains deferred.
 
 ## Ownership and API rules
@@ -22,9 +23,10 @@
 - `POST /api/journal/entry`
 - `GET /api/journal/entries?limit=&cursor=`
 - `POST /api/journal/entries/{id}/retry`
-- `POST /api/chat/rag`
+- `POST /api/chat/rag` with time zone and at most 10 prior session turns; temporal questions use UID-scoped date ranges and other questions use vector retrieval.
 - `POST /api/reflections/weekly`
 - `GET /api/action-items?limit=&cursor=`
+- `POST /api/action-items` for an authenticated user's own manually authored goal.
 - `PATCH|DELETE /api/action-items/{id}`
 - `GET /api/user/export?format=json|markdown`
 - `DELETE /api/account`

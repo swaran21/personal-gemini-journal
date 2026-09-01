@@ -63,11 +63,11 @@ Location is optional. Browser geolocation runs only after **Add current location
 
 ### Chat with Past Self
 
-Queries `/api/chat/rag`, renders a conversational response, and exposes bounded `referencedEntries` through a collapsible context list. Model content is rendered as text, not HTML.
+Queries `/api/chat/rag`, renders a conversational response, and exposes timestamped bounded `referencedEntries` through a collapsible context list. The browser sends its IANA time zone plus at most 10 earlier turns so follow-up questions are meaningful. History is held only for the signed-in browser session, survives tab switching, and is cleared when the authenticated subject changes. Model content is rendered as text, not HTML.
 
 ### Accountability Dashboard
 
-Loads cursor pages from `/api/action-items`. AI output is rendered first as a proposal with **Add goal** and **Dismiss** controls. Completion percentage includes only loaded accepted goals. Status changes and deletion are optimistic and roll back on failure.
+Loads cursor pages from `/api/action-items`. Users can create their own `PENDING` goals, while AI output is rendered first as a proposal with **Add goal** and **Dismiss** controls. Completion percentage includes only loaded accepted goals. Status changes and deletion are optimistic and roll back on failure.
 
 ### Weekly Reflection
 

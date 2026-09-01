@@ -49,12 +49,12 @@ The controller always receives a `FirebasePrincipal`-shaped principal. In local 
 
 ## RAG flow
 
-1. The query is validated and embedded.
-2. `JournalRepository.findRelevant(uid, vector, 5)` performs UID-scoped retrieval.
-3. PostgreSQL uses pgvector cosine distance; Firestore loads at most 100 documents from the UID path and ranks them in memory.
-4. Only bounded matches become AI grounding context.
-5. The prompt explicitly treats stored text as untrusted quoted data.
-6. The response returns the AI answer and excerpts capped at 500 characters.
+1. The question, IANA time zone, and at most 10 prior session turns are validated and sanitized.
+2. Questions containing `today`, `yesterday`, `this/last week`, or `last N hours` use an exact UID-scoped timestamp range and do not perform semantic retrieval.
+3. Other questions are embedded and `JournalRepository.findRelevant(uid, vector, 5)` performs UID-scoped retrieval.
+4. PostgreSQL uses pgvector cosine distance; Firestore loads at most 100 documents from the UID path and ranks them in memory.
+5. Bounded entries, exact timestamps, current time, time zone, and bounded prior turns become the AI grounding prompt. Stored text and previous messages remain explicitly untrusted.
+6. The response returns the AI answer and timestamped excerpts capped at 500 journal-text characters.
 
 No global vector query exists. A user's query cannot retrieve another user's embedding or content.
 
@@ -62,7 +62,7 @@ No global vector query exists. A user's query cannot retrieve another user's emb
 
 Journal and action-item lists use opaque URL-safe cursors encoding only the final row's creation time and document ID. PostgreSQL applies tuple keyset predicates; Firestore uses ordered `startAfter` queries below the UID collection. Limits are restricted to `1..100`; cursors never carry or select identity.
 
-Weekly reflection resolves a client-provided IANA time zone, normalizes the requested date to Monday, loads at most 100 owned entries from that seven-day interval, and invokes AI only when entries exist. Results are generated on demand and are not silently scheduled, which avoids hidden AI cost.
+Weekly reflection resolves a client-provided IANA time zone, normalizes the requested date to Monday, and loads at most 100 owned entries from that seven-day interval. The current week stops at the current instant. It invokes AI only when entries exist, requires evidence-based highlights and a specific focus, and falls back only to quoted entry facts when a provider returns empty structured fields. Results are generated on demand and are not silently scheduled, which avoids hidden AI cost.
 
 Data takeout streams JSON or Markdown while traversing UID-scoped pages. It exports journal text, reflection, processing state, approved location, and action items. Embeddings, outbox jobs, credentials, internal errors, and UID are excluded.
 
@@ -78,7 +78,8 @@ journal transaction
 scheduled worker
   |-- reclaim stale PROCESSING jobs
   |-- claim with FOR UPDATE SKIP LOCKED
-  |-- reflect + embed through Ollama
+  |-- reflect through Gemini (recommended) or Ollama
+  |-- embed locally through Ollama
   |-- UPDATE journal_entries(COMPLETED)
   |-- optionally extract PROPOSED goals
   |-- insert proposals with unique(user, source entry, goal)
@@ -93,7 +94,7 @@ Cloud mode currently follows the hackathon requirement with a Spring `@Async` po
 
 ### Local PostgreSQL
 
-`journal_entries` stores `user_id`, content, nullable AI response/vector, optional latitude/longitude/label, processing status/error, creation time, and version. `action_items` stores owner, optional source entry, goal, `PROPOSED/PENDING/COMPLETED` state, and creation time. `accountability_outbox` is internal and has no HTTP endpoint.
+`journal_entries` stores `user_id`, content, nullable AI response/vector, optional latitude/longitude/label, processing status/error, creation time, and version. `action_items` stores owner, optional source entry, goal, `PROPOSED/PENDING/COMPLETED` state, and creation time. AI output begins as `PROPOSED`; user-authored goals begin as `PENDING`. `accountability_outbox` is internal and has no HTTP endpoint.
 
 ## Load and privacy controls
 

@@ -2,7 +2,7 @@
 
 Personal Gemini Journal is a private reflection, memory retrieval, and accountability application. A signed-in user can write a journal entry, receive an empathetic AI response, ask questions grounded in their own earlier entries, and track goals extracted from their writing.
 
-The repository is deliberately local-first during the build phase. It runs without Google Cloud credentials or billing by using Keycloak, PostgreSQL with pgvector, and Ollama. The same application exposes a `cloud` Spring profile for the planned Firebase Authentication, Firestore, Gemini, Secret Manager, and Cloud Run deployment.
+The repository is deliberately local-first during the build phase. Keycloak and PostgreSQL/pgvector run locally. Ollama always supplies local embeddings and can supply generation too; the recommended development mode uses a server-side Google AI Studio key with Gemini for higher-quality reflections, grounded chat, weekly summaries, and goal extraction. The same application exposes a `cloud` Spring profile for the planned Firebase Authentication, Firestore, Gemini, Secret Manager, and Cloud Run deployment.
 
 ## Aim
 
@@ -11,7 +11,7 @@ The project demonstrates that useful AI features do not require weakening owners
 ## Main capabilities
 
 - Authenticated personal journal with empathetic AI reflection.
-- Multi-turn context from the caller's recent entries.
+- Bounded session chat history plus timestamp-aware private journal context.
 - Vector embeddings stored with every entry.
 - "Chat with Past Self" using private similarity retrieval and grounded generation.
 - Persistence-first journal writes: HTTP 202 after durable save, then background reflection, embedding, and goal extraction.
@@ -54,7 +54,7 @@ Spring Security -> FirebasePrincipal(subject/uid)
   |
   +-> ChatService -> JournalRepository (durable PENDING entry + outbox)
   |                    `-> background worker -> reflection + embedding + goal proposals
-  +-> RAG service -> private vector retrieval -> grounded Ollama / Gemini
+  +-> RAG service -> temporal or private vector retrieval -> grounded Ollama / Gemini
   |
   `-> JournalRepository -> PostgreSQL + pgvector / Firestore
                            `-> users are isolated by UID and RLS/path ownership
@@ -66,8 +66,8 @@ Spring profiles select adapters:
 |---|---|---|
 | Authentication | Keycloak OIDC JWT | Firebase ID token verification |
 | Persistence | PostgreSQL 16 + pgvector | Cloud Firestore |
-| AI | Ollama `gemma3:1b` | Gemini `gemini-2.5-flash` |
-| Embeddings | Ollama `nomic-embed-text` | Gemini Embedding API |
+| AI | Gemini `gemini-2.5-flash` with `gemini` profile; Ollama fallback | Gemini `gemini-2.5-flash` |
+| Embeddings | Ollama `nomic-embed-text` (including hybrid Gemini mode) | Gemini Embedding API |
 | Secrets | Ignored `.env.local` | Google Secret Manager + workload identity |
 | Background AI | Transactional outbox worker | Spring `@Async` adapter (managed queue planned) |
 
@@ -80,7 +80,7 @@ Detailed flows are in [Architecture](docs/ARCHITECTURE.md) and [Security](docs/S
 - At least 4 GB of free Docker memory and roughly 2 GB of free disk space for the first model/image pull.
 - JDK 17+ and Node.js 22+ only when running services outside Docker.
 
-No Firebase project, Google Cloud credentials, Gemini key, or billing account is required for the local profile.
+No Firebase project or Google Cloud service credentials are required locally. A Gemini key is optional: set `AI_GENERATION_PROVIDER=ollama` for a completely local stack, or use the recommended `gemini` setting with a Google AI Studio key for stronger generative output.
 
 ## Quick start
 
@@ -90,12 +90,15 @@ From the repository root:
 Copy-Item .env.example .env.local
 ```
 
-Edit `.env.local` and assign strong local values to these three blank settings:
+Edit `.env.local`, assign strong local values to the three infrastructure secrets, and add a Gemini key when using the recommended hybrid mode:
 
 ```text
 POSTGRES_PASSWORD=
 DB_ADMIN_PASSWORD=
 KEYCLOAK_ADMIN_PASSWORD=
+AI_GENERATION_PROVIDER=gemini
+GEMINI_API_KEY=<your Google AI Studio key>
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 Start the stack:
@@ -146,9 +149,10 @@ All application routes require `Authorization: Bearer <access_token>`.
 | POST | `/api/journal/entry` | `{ "content": "...", "location": { ... } }` | `202`; durable entry; location is optional |
 | GET | `/api/journal/entries?limit=20&cursor=...` | none | Cursor page of only the caller's entries |
 | POST | `/api/journal/entries/{id}/retry` | none | `202`; retries only an owned failed entry |
-| POST | `/api/chat/rag` | `{ "query": "..." }` | Returns `reply` and `referencedEntries` |
+| POST | `/api/chat/rag` | `{ "query": "...", "timeZone": "Asia/Kolkata", "history": [...] }` | Temporal/semantic grounded reply and timestamped references |
 | POST | `/api/reflections/weekly` | `{ "timeZone": "Asia/Calcutta" }` | Grounded current-week patterns and focus |
 | GET | `/api/action-items?limit=50&cursor=...` | none | Cursor page of owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
+| POST | `/api/action-items` | `{ "goal": "..." }` | Creates an owned user-authored `PENDING` goal |
 | PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` | Accepts or updates an owned goal |
 | DELETE | `/api/action-items/{id}` | none | Deletes an owned goal |
 | GET | `/api/user/export?format=json|markdown` | none | Streamed private data takeout attachment |

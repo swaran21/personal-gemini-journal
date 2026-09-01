@@ -4,13 +4,31 @@
 
 ```powershell
 Copy-Item .env.example .env.local
-# Fill POSTGRES_PASSWORD, DB_ADMIN_PASSWORD, and KEYCLOAK_ADMIN_PASSWORD.
+# Fill POSTGRES_PASSWORD, DB_ADMIN_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, and GEMINI_API_KEY.
 docker compose --env-file .env.local config --quiet
 docker compose --env-file .env.local up -d --build
 docker compose --env-file .env.local ps
 ```
 
-Open `http://localhost:13000`. First-time model downloads are stored in the `journal-ollama` volume and are reused.
+Open `http://localhost:13000`. Gemini performs generation in the recommended mode; Ollama downloads only the local `nomic-embed-text` embedding model. Model data is stored in the `journal-ollama` volume and reused.
+
+### Gemini key for local development
+
+Create a key in Google AI Studio and put it only in the ignored root `.env.local` file:
+
+```text
+AI_GENERATION_PROVIDER=gemini
+GEMINI_API_KEY=<paste the key here>
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Never use a `VITE_*` variable for this key: Vite variables are downloadable by every browser. Never commit `.env.local`. After changing Compose environment values, recreate the backend because Compose reads them when creating the container:
+
+```powershell
+docker compose --env-file .env.local up -d --build --force-recreate backend
+```
+
+The key is used for journal reflection, RAG answer generation, weekly reflection, and action-item extraction. Embeddings remain local through Ollama `nomic-embed-text`, so journal text sent for embedding does not use Gemini embedding quota. To run without any external AI request, set `AI_GENERATION_PROVIDER=ollama` and leave `GEMINI_API_KEY` empty; the smaller local model will usually produce less capable summaries.
 
 Useful checks:
 
@@ -40,7 +58,7 @@ com.pm.personalgeminijournalbackend.PersonalGeminiJournalBackendApplication
 Set working directory to `personal-gemini-journal-backend` and environment variables:
 
 ```text
-SPRING_PROFILES_ACTIVE=local
+SPRING_PROFILES_ACTIVE=local,gemini
 PORT=18080
 DATABASE_URL=jdbc:postgresql://localhost:55432/journal
 POSTGRES_USER=journal_app
@@ -51,6 +69,8 @@ OIDC_AUDIENCE=journal-web
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=gemma3:1b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+GEMINI_API_KEY=<your Google AI Studio key>
+GEMINI_MODEL=gemini-2.5-flash
 CORS_ALLOWED_ORIGINS=http://localhost:13000,http://localhost:3000
 JOURNAL_WRITES_PER_HOUR=30
 RAG_QUERIES_PER_HOUR=20
@@ -58,6 +78,8 @@ API_REQUESTS_PER_MINUTE=120
 ```
 
 `PORT=18080` is used because this workstation already had another Java process on `8080`. Spring still defaults to Cloud Run-compatible `${PORT:8080}`.
+
+For the all-local fallback, use `SPRING_PROFILES_ACTIVE=local` and omit `GEMINI_API_KEY`; `OllamaAiService` then handles both generation and embeddings.
 
 ## Run frontend with Vite
 
