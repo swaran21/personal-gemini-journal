@@ -20,10 +20,10 @@ class JournalRepositoryTest {
 
     @Test void rejectsInvalidActionItemIdsBeforeCreatingFirestorePaths() {
         for (String invalid : List.of("", "../other-user", "contains space", "a".repeat(129))) {
-            assertThrows(IllegalArgumentException.class, () -> repository.setActionItemCompleted("uid", invalid, true));
+            assertThrows(IllegalArgumentException.class, () -> repository.setActionItemStatus("uid", invalid, ActionItem.Status.COMPLETED));
             assertThrows(IllegalArgumentException.class, () -> repository.deleteActionItem("uid", invalid));
         }
-        assertThrows(IllegalArgumentException.class, () -> repository.setActionItemCompleted("uid", null, true));
+        assertThrows(IllegalArgumentException.class, () -> repository.setActionItemStatus("uid", null, ActionItem.Status.COMPLETED));
         verifyNoInteractions(firestore);
     }
 }

@@ -17,6 +17,6 @@ public interface JournalRepository {
     List<JournalEntry> listEntries(String uid);
     List<ActionItem> listActionItems(String uid);
     List<JournalEntry> findRelevant(String uid, List<Double> queryEmbedding, int limit);
-    void setActionItemCompleted(String uid, String id, boolean completed);
+    void setActionItemStatus(String uid, String id, ActionItem.Status status);
     void deleteActionItem(String uid, String id);
 }

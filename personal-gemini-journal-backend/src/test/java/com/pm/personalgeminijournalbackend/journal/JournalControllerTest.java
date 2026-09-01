@@ -35,11 +35,11 @@ class JournalControllerTest {
     @Test void actionControllerMapsStorageShapeAndStatus() {
         JournalRepository repository = mock(JournalRepository.class);
         JournalController controller = new JournalController(repository);
-        when(repository.listActionItems("uid-1")).thenReturn(List.of(new ActionItem("id", "Write tests", false, Instant.EPOCH), new ActionItem("done", "Deploy", true, Instant.EPOCH)));
+        when(repository.listActionItems("uid-1")).thenReturn(List.of(new ActionItem("id", "Write tests", ActionItem.Status.PROPOSED, Instant.EPOCH), new ActionItem("done", "Deploy", ActionItem.Status.COMPLETED, Instant.EPOCH)));
 
         List<ActionItemResponse> results = controller.actionItems(new FirebasePrincipal("uid-1"));
 
-        assertEquals(List.of("PENDING", "COMPLETED"), results.stream().map(ActionItemResponse::status).toList());
+        assertEquals(List.of("PROPOSED", "COMPLETED"), results.stream().map(ActionItemResponse::status).toList());
         assertEquals(List.of("Write tests", "Deploy"), results.stream().map(ActionItemResponse::goal).toList());
     }
 
@@ -52,10 +52,10 @@ class JournalControllerTest {
         controller.update(principal, "item-1", new JournalController.CompletionRequest("PENDING"));
         controller.delete(principal, "item-1");
 
-        verify(repository).setActionItemCompleted("uid-1", "item-1", true);
-        verify(repository).setActionItemCompleted("uid-1", "item-1", false);
+        verify(repository).setActionItemStatus("uid-1", "item-1", ActionItem.Status.COMPLETED);
+        verify(repository).setActionItemStatus("uid-1", "item-1", ActionItem.Status.PENDING);
         verify(repository).deleteActionItem("uid-1", "item-1");
-        verify(repository, never()).setActionItemCompleted(eq("other-user"), anyString(), anyBoolean());
+        verify(repository, never()).setActionItemStatus(eq("other-user"), anyString(), any());
     }
 
     @Test void completionRequestRejectsInvalidAndNullStatuses() {

@@ -33,7 +33,7 @@ public class FirestoreJournalRepository implements JournalRepository {
     @Override public void saveActionItems(String uid, List<String> goals, Instant now) {
         if (goals.isEmpty()) return;
         WriteBatch batch = firestore.batch();
-        for (String goal : goals) batch.set(actionItems(uid).document(), Map.of("text", goal, "completed", false, "createdAt", now.toEpochMilli()));
+        for (String goal : goals) batch.set(actionItems(uid).document(), Map.of("text", goal, "status", "PROPOSED", "completed", false, "createdAt", now.toEpochMilli()));
         wait(batch.commit());
     }
     @Override public List<JournalEntry> recentEntries(String uid, int maxResults) {
@@ -59,14 +59,19 @@ public class FirestoreJournalRepository implements JournalRepository {
     @Override public List<ActionItem> listActionItems(String uid) {
         try {
             return actionItems(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(100).get().get().getDocuments().stream().map(d ->
-                    new ActionItem(d.getId(), d.getString("text"), Boolean.TRUE.equals(d.getBoolean("completed")), Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)))).toList();
+                    new ActionItem(d.getId(), d.getString("text"), actionStatus(d), Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)))).toList();
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
-    @Override public void setActionItemCompleted(String uid, String id, boolean completed) { String valid = validId(id); wait(actionItems(uid).document(valid).update("completed", completed)); }
+    @Override public void setActionItemStatus(String uid, String id, ActionItem.Status status) { String valid = validId(id); wait(actionItems(uid).document(valid).update(Map.of("status", status.name(), "completed", status == ActionItem.Status.COMPLETED))); }
     @Override public void deleteActionItem(String uid, String id) { String valid = validId(id); wait(actionItems(uid).document(valid).delete()); }
     private String validId(String id) { if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("Invalid document id"); return id; }
     private List<Double> embedding(Object value) { if (!(value instanceof List<?> values)) return List.of(); return values.stream().filter(Number.class::isInstance).map(Number.class::cast).map(Number::doubleValue).toList(); }
+    private ActionItem.Status actionStatus(com.google.cloud.firestore.DocumentSnapshot document) {
+        String status = document.getString("status");
+        if (status != null) return ActionItem.Status.valueOf(status);
+        return Boolean.TRUE.equals(document.getBoolean("completed")) ? ActionItem.Status.COMPLETED : ActionItem.Status.PENDING;
+    }
     private JournalEntry entry(com.google.cloud.firestore.DocumentSnapshot document, List<Double> embedding) {
         String rawStatus = Objects.requireNonNullElse(document.getString("processingStatus"), "COMPLETED");
         return new JournalEntry(document.getId(), document.getString("text"), document.getString("response"),

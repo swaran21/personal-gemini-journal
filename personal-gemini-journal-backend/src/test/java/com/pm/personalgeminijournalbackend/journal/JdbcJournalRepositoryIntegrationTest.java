@@ -56,7 +56,7 @@ class JdbcJournalRepositoryIntegrationTest {
         assertEquals(List.of("first"), inTransaction(() -> repository.listEntries("user-a")).stream().map(JournalEntry::text).toList());
         assertEquals(List.of("second"), inTransaction(() -> repository.listEntries("user-b")).stream().map(JournalEntry::text).toList());
         assertThrows(NoSuchElementException.class, () -> inTransaction(() -> {
-            repository.setActionItemCompleted("user-b", privateActionId, true);
+            repository.setActionItemStatus("user-b", privateActionId, ActionItem.Status.COMPLETED);
             return null;
         }));
     }

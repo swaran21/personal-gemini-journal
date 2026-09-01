@@ -49,7 +49,7 @@ public class JdbcJournalRepository implements JournalRepository {
         if (goals.isEmpty()) return;
         scope(uid);
         UUID sourceId = sourceEntryId == null ? null : uuid(sourceEntryId);
-        for (String goal : goals) jdbc.sql("INSERT INTO action_items(id,user_id,source_entry_id,goal,completed,created_at) VALUES (:id,:uid,:sourceId,:goal,false,:createdAt) ON CONFLICT (user_id,source_entry_id,goal) DO NOTHING")
+        for (String goal : goals) jdbc.sql("INSERT INTO action_items(id,user_id,source_entry_id,goal,completed,status,created_at) VALUES (:id,:uid,:sourceId,:goal,false,'PROPOSED',:createdAt) ON CONFLICT (user_id,source_entry_id,goal) DO NOTHING")
                 .param("id", UUID.randomUUID()).param("uid", uid).param("sourceId", sourceId).param("goal", goal).param("createdAt", Timestamp.from(now)).update();
     }
 
@@ -63,8 +63,8 @@ public class JdbcJournalRepository implements JournalRepository {
 
     @Override @Transactional(readOnly = true) public List<ActionItem> listActionItems(String uid) {
         scope(uid);
-        return jdbc.sql("SELECT id,goal,completed,created_at FROM action_items WHERE user_id=:uid ORDER BY created_at DESC LIMIT 100")
-                .param("uid", uid).query((rs, row) -> new ActionItem(rs.getObject("id", UUID.class).toString(), rs.getString("goal"), rs.getBoolean("completed"), rs.getTimestamp("created_at").toInstant())).list();
+        return jdbc.sql("SELECT id,goal,status,created_at FROM action_items WHERE user_id=:uid ORDER BY created_at DESC LIMIT 100")
+                .param("uid", uid).query((rs, row) -> new ActionItem(rs.getObject("id", UUID.class).toString(), rs.getString("goal"), ActionItem.Status.valueOf(rs.getString("status")), rs.getTimestamp("created_at").toInstant())).list();
     }
 
     @Override @Transactional(readOnly = true) public List<JournalEntry> findRelevant(String uid, List<Double> queryEmbedding, int limit) {
@@ -74,10 +74,10 @@ public class JdbcJournalRepository implements JournalRepository {
                 .query((rs, row) -> entry(rs, List.of())).list();
     }
 
-    @Override @Transactional public void setActionItemCompleted(String uid, String id, boolean completed) {
+    @Override @Transactional public void setActionItemStatus(String uid, String id, ActionItem.Status status) {
         scope(uid);
-        int changed = jdbc.sql("UPDATE action_items SET completed=:completed WHERE id=:id AND user_id=:uid")
-                .param("completed", completed).param("id", uuid(id)).param("uid", uid).update();
+        int changed = jdbc.sql("UPDATE action_items SET status=:status,completed=:completed,version=version+1 WHERE id=:id AND user_id=:uid")
+                .param("status", status.name()).param("completed", status == ActionItem.Status.COMPLETED).param("id", uuid(id)).param("uid", uid).update();
         if (changed == 0) throw new NoSuchElementException("Action item not found");
     }
 
