@@ -10,6 +10,7 @@ import { JournalView } from './components/journal/JournalView';
 import { RagView } from './components/rag/RagView';
 import { AccountabilityView } from './components/accountability/AccountabilityView';
 import { WeeklyReflectionView } from './components/reflection/WeeklyReflectionView';
+import { CalendarView } from './components/calendar/CalendarView';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -22,6 +23,7 @@ export default function App() {
   const [actionPage, setActionPage] = useState({ nextCursor: null, hasMore: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [identity, setIdentity] = useState({ roles: ['USER'] });
 
   const refreshEntries = useCallback(async () => {
     const page = await api('/api/journal/entries?limit=20');
@@ -45,12 +47,14 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [journalPage, goalPage] = await Promise.all([
+      const [journalPage, goalPage, profile] = await Promise.all([
         api('/api/journal/entries?limit=20'),
         api('/api/action-items?limit=50'),
+        api('/api/user/me'),
       ]);
       setEntries(journalPage.items); setEntryPage(journalPage);
       setActionItems(goalPage.items); setActionPage(goalPage);
+      setIdentity(profile);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -70,8 +74,8 @@ export default function App() {
   if (!authReady) return <PageLoader fullScreen />;
   if (!user) return <LoginScreen initialError={error} />;
 
-  return <div className="min-h-screen bg-[#F9F8F4] text-[#2D362E] selection:bg-[#7A8D80]/20">
-    <Header user={user} setError={setError} />
+  return <div className="min-h-screen bg-[radial-gradient(circle_at_10%_0%,#ede9fe_0,transparent_28%),radial-gradient(circle_at_90%_10%,#fef3c7_0,transparent_25%),linear-gradient(180deg,#fafafa_0%,#f8fafc_100%)] text-slate-800 selection:bg-violet-200">
+    <Header user={user} identity={identity} setError={setError} />
     <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
       <ViewTabs view={view} setView={setView} />
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
@@ -79,6 +83,7 @@ export default function App() {
       {view === 'rag' && <RagView messages={ragMessages} setMessages={setRagMessages} setError={setError} />}
       {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} hasMore={actionPage.hasMore} loadMore={async () => { try { const page = await api(`/api/action-items?limit=50&cursor=${encodeURIComponent(actionPage.nextCursor)}`); setActionItems((current) => [...current, ...page.items]); setActionPage(page); } catch (requestError) { setError(requestError.message); } }} />}
       {view === 'weekly' && <WeeklyReflectionView setError={setError} />}
+      {view === 'calendar' && <CalendarView setError={setError} />}
     </main>
   </div>;
 }

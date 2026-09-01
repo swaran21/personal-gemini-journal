@@ -121,4 +121,20 @@ class JournalControllerTest {
         verify(repository).deleteJournalEntry("owner", "entry-1");
         verify(repository, never()).deleteJournalEntry(eq("other-user"), anyString());
     }
+
+    @Test void calendarUsesAuthenticatedUidAndUsersTimeZoneMonth() {
+        ChatService chatService = mock(ChatService.class); JournalRepository repository = mock(JournalRepository.class);
+        JournalEntryController controller = new JournalEntryController(chatService, repository);
+        when(repository.entriesBetween("owner", Instant.parse("2026-08-31T18:30:00Z"), Instant.parse("2026-09-30T18:30:00Z"), 100)).thenReturn(List.of());
+        assertTrue(controller.calendar(new FirebasePrincipal("owner"), 2026, 9, "Asia/Kolkata").isEmpty());
+        verify(repository).entriesBetween("owner", Instant.parse("2026-08-31T18:30:00Z"), Instant.parse("2026-09-30T18:30:00Z"), 100);
+        verify(repository, never()).entriesBetween(eq("other-user"), any(), any(), anyInt());
+    }
+
+    @Test void calendarRejectsInvalidMonthAndTimeZone() {
+        JournalEntryController controller = new JournalEntryController(mock(ChatService.class), mock(JournalRepository.class));
+        FirebasePrincipal principal = new FirebasePrincipal("owner");
+        assertThrows(IllegalArgumentException.class, () -> controller.calendar(principal, 2026, 13, "UTC"));
+        assertThrows(IllegalArgumentException.class, () -> controller.calendar(principal, 2026, 9, "Not/AZone"));
+    }
 }
