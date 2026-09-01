@@ -19,7 +19,7 @@ Create a key in Google AI Studio and put it only in the ignored root `.env.local
 ```text
 AI_GENERATION_PROVIDER=gemini
 GEMINI_API_KEY=<paste the key here>
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 GEMINI_EMBEDDING_DIMENSIONS=768
 ```
@@ -72,7 +72,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=gemma3:1b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 GEMINI_API_KEY=<your Google AI Studio key>
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 GEMINI_EMBEDDING_DIMENSIONS=768
 CORS_ALLOWED_ORIGINS=http://localhost:13000,http://localhost:3000

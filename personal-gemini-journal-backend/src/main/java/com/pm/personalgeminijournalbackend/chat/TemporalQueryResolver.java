@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 
 @Component
 public class TemporalQueryResolver {
-    private static final Pattern LAST_HOURS = Pattern.compile("\\b(?:last|past)\\s+(\\d{1,3})\\s+hours?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LAST_HOURS = Pattern.compile("\\b(?:last|past|previous)\\s+(\\d{1,3})\\s+hours?\\b", Pattern.CASE_INSENSITIVE);
     private final Clock clock;
 
     public TemporalQueryResolver() { this(Clock.systemUTC()); }
@@ -23,7 +23,7 @@ public class TemporalQueryResolver {
         if (hours.find()) {
             int value = Integer.parseInt(hours.group(1));
             if (value < 1 || value > 720) throw new IllegalArgumentException("relative hour range must be between 1 and 720");
-            return Optional.of(new TimeRange(now.minus(Duration.ofHours(value)), now, "the last " + value + " hours"));
+            return Optional.of(new TimeRange(now.minus(Duration.ofHours(value)), now, "the previous " + value + " hours"));
         }
         String normalized = question.toLowerCase(Locale.ROOT);
         LocalDate today = LocalDate.now(clock.withZone(zone));

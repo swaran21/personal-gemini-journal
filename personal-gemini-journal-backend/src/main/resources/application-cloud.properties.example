@@ -4,6 +4,6 @@ GEMINI_API_KEY_SECRET=projects/your-project/secrets/GEMINI_API_KEY/versions/late
 GOOGLE_CLOUD_PROJECT=your-project
 FIRESTORE_DATABASE_ID=(default)
 CORS_ALLOWED_ORIGINS=https://your-frontend.example
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 GEMINI_EMBEDDING_DIMENSIONS=768

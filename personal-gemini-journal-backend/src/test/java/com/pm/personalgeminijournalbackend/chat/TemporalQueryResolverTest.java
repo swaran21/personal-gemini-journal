@@ -25,6 +25,12 @@ class TemporalQueryResolverTest {
         assertEquals(Instant.parse("2026-09-01T12:00:00Z"), range.endExclusive());
     }
 
+    @Test void resolvesPreviousHours() {
+        var range = resolver.resolve("What did I do in my previous 5 hours?", ZoneId.of("UTC")).orElseThrow();
+        assertEquals(Instant.parse("2026-09-01T07:00:00Z"), range.startInclusive());
+        assertEquals(Instant.parse("2026-09-01T12:00:00Z"), range.endExclusive());
+    }
+
     @Test void rejectsUnboundedRelativeHourWindows() {
         assertThrows(IllegalArgumentException.class, () -> resolver.resolve("past 999 hours", ZoneId.of("UTC")));
     }
