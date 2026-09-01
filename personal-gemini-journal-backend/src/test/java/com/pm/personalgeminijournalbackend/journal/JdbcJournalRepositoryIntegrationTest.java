@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -70,6 +71,36 @@ class JdbcJournalRepositoryIntegrationTest {
 
         assertEquals(1, matches.size());
         assertEquals("closest", matches.get(0).text());
+    }
+
+    @Test
+    void retryRequiresOwnershipAndFailedState() {
+        String owner = "retry-owner-" + UUID.randomUUID();
+        String other = "retry-other-" + UUID.randomUUID();
+        String id = inTransaction(() -> repository.createPendingEntry(owner, "saved first", Instant.now()));
+        inTransaction(() -> { repository.failEntryProcessing(owner, id, "safe failure"); return null; });
+
+        assertThrows(NoSuchElementException.class, () -> inTransaction(() -> repository.retryEntryProcessing(other, id, Instant.now())));
+        JournalEntry retried = inTransaction(() -> repository.retryEntryProcessing(owner, id, Instant.now()));
+
+        assertEquals(JournalEntry.ProcessingStatus.PENDING, retried.processingStatus());
+        assertEquals("saved first", retried.text());
+        assertThrows(NoSuchElementException.class, () -> inTransaction(() -> repository.retryEntryProcessing(owner, id, Instant.now())));
+    }
+
+    @Test
+    void accountDeletionRemovesOnlyAuthenticatedOwnersData() {
+        String deletedOwner = "deleted-" + UUID.randomUUID();
+        String retainedOwner = "retained-" + UUID.randomUUID();
+        String deletedEntry = createComplete(deletedOwner, "delete me", "reply", embedding(1d), Instant.now());
+        createComplete(retainedOwner, "keep me", "reply", embedding(1d), Instant.now());
+        inTransaction(() -> { repository.saveActionItems(deletedOwner, deletedEntry, List.of("delete goal"), Instant.now()); return null; });
+
+        inTransaction(() -> { repository.deleteAllUserData(deletedOwner); return null; });
+
+        assertTrue(inTransaction(() -> repository.listEntries(deletedOwner)).isEmpty());
+        assertTrue(inTransaction(() -> repository.listActionItems(deletedOwner)).isEmpty());
+        assertEquals(List.of("keep me"), inTransaction(() -> repository.listEntries(retainedOwner)).stream().map(JournalEntry::text).toList());
     }
 
     private static List<Double> embedding(double value) {

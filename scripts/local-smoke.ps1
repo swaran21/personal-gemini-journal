@@ -92,7 +92,14 @@ try {
     $created = Invoke-Api 'Post' '/api/journal/entry' $firstToken @{
         content = 'Today I completed my architecture review. Tomorrow at 9 AM I will write the security test report.'
     }
-    if (-not $created.id -or -not $created.aiResponse) { throw 'Journal creation response is incomplete' }
+    if (-not $created.id -or $created.processingStatus -ne 'PENDING') { throw 'Journal was not accepted for background processing' }
+
+    $processed = $null
+    for ($attempt = 0; $attempt -lt 30 -and $null -eq $processed; $attempt++) {
+        Start-Sleep -Seconds 2
+        $processed = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken) | Where-Object { $_.id -eq $created.id -and $_.processingStatus -eq 'COMPLETED' }) | Select-Object -First 1
+    }
+    if ($null -eq $processed -or -not $processed.aiResponse) { throw 'Background reflection did not complete within 60 seconds' }
     $savedEntries = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken) | Where-Object { $null -ne $_ })
     if ($savedEntries.Count -ne 1 -or $savedEntries[0].id -ne $created.id) { throw 'Owner could not list the saved journal entry' }
 
@@ -106,6 +113,9 @@ try {
     }
     if ($items.Count -eq 0) { throw 'Accountability outbox did not produce an action item within 60 seconds' }
 
+    if ($items[0].status -eq 'PROPOSED') {
+        Invoke-Api 'Patch' "/api/action-items/$($items[0].id)" $firstToken @{ status = 'PENDING' } | Out-Null
+    }
     Invoke-Api 'Patch' "/api/action-items/$($items[0].id)" $firstToken @{ status = 'COMPLETED' } | Out-Null
     $reloadedItems = @((Invoke-Api 'Get' '/api/action-items' $firstToken) | Where-Object { $null -ne $_ })
     $completed = $reloadedItems | Where-Object { $_.id -eq $items[0].id } | Select-Object -First 1

@@ -22,6 +22,13 @@ export async function api(path, options = {}) {
     await authProvider.logout();
     throw new Error('Your secure session has expired. Please sign in again.');
   }
+  if (response.status === 429) {
+    const retrySeconds = Number(response.headers.get('Retry-After'));
+    const wait = Number.isFinite(retrySeconds) && retrySeconds > 0
+      ? ` Try again in about ${Math.max(1, Math.ceil(retrySeconds / 60))} minute${retrySeconds > 60 ? 's' : ''}.`
+      : ' Please try again later.';
+    throw new Error(`You have reached the request limit.${wait}`);
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || body.error || `Request failed (${response.status})`);
