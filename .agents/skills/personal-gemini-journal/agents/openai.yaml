@@ -1,0 +1,4 @@
+interface:
+  display_name: "Personal Gemini Journal"
+  short_description: "Securely extend and verify this journal monorepo"
+  default_prompt: "Use $personal-gemini-journal to modify this journal monorepo while preserving authentication, user isolation, adapter parity, and verification."

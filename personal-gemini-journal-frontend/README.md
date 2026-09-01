@@ -1,6 +1,6 @@
 # Personal Gemini Journal Frontend
 
-React 18/Vite client for daily reflection, private RAG, and accountability tracking. The component structure preserves the original warm off-white/sage journal design while separating authentication, API access, layout, journal, RAG, and goal features.
+React 18/Vite client for daily reflection, private RAG, weekly insights, accountability, location pins, and privacy takeout. The component structure preserves the original warm off-white/sage journal design while separating authentication, API access, layout, journal, RAG, reflection, goal, and account features.
 
 ## Stack
 
@@ -26,6 +26,7 @@ src/
 |   |-- layout/                   Header and view tabs
 |   |-- journal/                  Composer and entry feed
 |   |-- rag/                      Past-self conversation and references
+|   |-- reflection/               On-demand weekly insight view
 |   |-- accountability/           Dashboard/progress
 |   |-- actions/                  Reusable goal controls
 |   |-- account/                  Destructive deletion confirmation
@@ -56,7 +57,9 @@ The frontend never sends a UID.
 
 ### Daily Journal
 
-The textarea is capped at 10,000 characters and preserves the draft after failure. Submission saves immediately; the new entry renders with a background-processing indicator while the feed polls boundedly for completion. A provider failure never removes the journal text and exposes a safe retry control using the stored entry ID rather than resending content from the browser.
+The textarea is capped at 10,000 characters and preserves the draft after failure. Submission saves immediately; the new entry renders with a background-processing indicator while the feed polls boundedly for completion. A provider failure never removes the journal text and exposes a safe retry control using the stored entry ID rather than resending content from the browser. The feed uses opaque cursor pagination.
+
+Location is optional. Browser geolocation runs only after **Add current location**, permission denial does not block saving, and the approved pin can be opened through a keyless Google Maps URL. No Maps key is embedded in the application.
 
 ### Chat with Past Self
 
@@ -64,11 +67,17 @@ Queries `/api/chat/rag`, renders a conversational response, and exposes bounded 
 
 ### Accountability Dashboard
 
-Loads `/api/action-items`. AI output is rendered first as a proposal with **Add goal** and **Dismiss** controls. Completion percentage includes only accepted goals. Status changes and deletion are optimistic and roll back on failure.
+Loads cursor pages from `/api/action-items`. AI output is rendered first as a proposal with **Add goal** and **Dismiss** controls. Completion percentage includes only loaded accepted goals. Status changes and deletion are optimistic and roll back on failure.
+
+### Weekly Reflection
+
+Sends the browser's IANA time-zone name to `/api/reflections/weekly` and renders grounded highlights, accomplishments, unresolved themes, and one suggested focus. Generation is user-triggered, shows the number of source entries, and has a no-entry state.
 
 ### Privacy and deletion
 
 The shield control opens a destructive confirmation dialog. The user must type `DELETE`; the request sends no UID and uses the same freshly acquired bearer token. In local OIDC mode the dialog explains that application data is removed while the externally managed Keycloak login record remains. Cloud mode also deletes the Firebase identity.
+
+The download control offers JSON and Markdown takeout. The authenticated response is saved as a browser download; tokens are not placed in URLs and object URLs are immediately revoked.
 
 ## Environment
 
@@ -97,6 +106,6 @@ Vite serves on port `3000`; the Dockerized unprivileged Nginx frontend is expose
 
 ## Browser security
 
-The production container sends a restrictive Content Security Policy, denies framing, prevents MIME sniffing, limits referrer data, and disables camera/microphone/geolocation permissions. It binds to a non-privileged internal port and runs as UID `101`.
+The production container sends a restrictive Content Security Policy, denies framing, prevents MIME sniffing, limits referrer data, disables camera/microphone, and allows geolocation only to the same origin after browser permission. It binds to a non-privileged internal port and runs as UID `101`.
 
 Cloud deployment must rebuild CSP/connect targets for the HTTPS frontend/backend/Firebase origins and should add HSTS only on the final HTTPS hostname.

@@ -19,6 +19,10 @@ The project demonstrates that useful AI features do not require weakening owners
 - User-confirmed AI goal proposals; model suggestions never become commitments without approval.
 - Authenticated per-user quotas for journal writes, RAG, and ordinary API traffic.
 - UID-scoped permanent account-data deletion, including Firebase identity deletion in cloud mode.
+- Cursor-paginated journal and action-item feeds with stable opaque cursors.
+- On-demand, grounded weekly reflections over one authenticated seven-day window.
+- Privacy takeout as streamed JSON or Markdown without embeddings or internal jobs.
+- Explicitly opt-in location pins that open through keyless Google Maps URLs.
 - Local and cloud adapters behind the same application ports.
 - Responsive warm journal UI, secure session handling, CSP, and container health checks.
 
@@ -139,13 +143,15 @@ All application routes require `Authorization: Bearer <access_token>`.
 
 | Method | Endpoint | Request | Response/purpose |
 |---|---|---|---|
-| POST | `/api/journal/entry` | `{ "content": "..." }` | `202`; durable entry with `processingStatus=PENDING` |
-| GET | `/api/journal/entries` | none | Lists only the caller's entries |
+| POST | `/api/journal/entry` | `{ "content": "...", "location": { ... } }` | `202`; durable entry; location is optional |
+| GET | `/api/journal/entries?limit=20&cursor=...` | none | Cursor page of only the caller's entries |
 | POST | `/api/journal/entries/{id}/retry` | none | `202`; retries only an owned failed entry |
 | POST | `/api/chat/rag` | `{ "query": "..." }` | Returns `reply` and `referencedEntries` |
-| GET | `/api/action-items` | none | Lists owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
+| POST | `/api/reflections/weekly` | `{ "timeZone": "Asia/Calcutta" }` | Grounded current-week patterns and focus |
+| GET | `/api/action-items?limit=50&cursor=...` | none | Cursor page of owned `PROPOSED`, `PENDING`, and `COMPLETED` items |
 | PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` | Accepts or updates an owned goal |
 | DELETE | `/api/action-items/{id}` | none | Deletes an owned goal |
+| GET | `/api/user/export?format=json|markdown` | none | Streamed private data takeout attachment |
 | DELETE | `/api/account` | none | Permanently deletes caller-owned application data and cloud identity |
 | GET | `/actuator/health` | none | Public liveness/readiness endpoint |
 
@@ -158,6 +164,7 @@ UID is intentionally absent from every request contract.
 - PostgreSQL uses a non-superuser application role, UID predicates, parameterized SQL, and forced row-level security.
 - Firestore paths are always `users/{verifiedUid}/journal_entries` or `users/{verifiedUid}/action_items`.
 - AI prompts mark journal content as untrusted data; structured results are bounded and validated.
+- Locations are explicit-consent coordinates, server range validated, exported/deleted with entries, and never require a Maps key in the current UI.
 - Gemini keys are loaded only from Secret Manager and sent through `x-goog-api-key`, never a URL or browser bundle.
 - CORS is an allowlist, tokens are kept in provider memory, and the client refreshes once after `401`.
 - Containers bind development ports to loopback, backend and frontend run as non-root users, and Nginx sends CSP/clickjacking/content-type/referrer headers.
@@ -191,5 +198,6 @@ Follow [Cloud Run migration plan](docs/CLOUD_RUN_MIGRATION.md) when credentials 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security and threat model](docs/SECURITY.md)
 - [Cloud Run migration plan](docs/CLOUD_RUN_MIGRATION.md)
+- [AI and Google Maps development directives](docs/AI_DEVELOPMENT_DIRECTIVES.md)
 - [Backend guide](personal-gemini-journal-backend/README.md)
 - [Frontend guide](personal-gemini-journal-frontend/README.md)

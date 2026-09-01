@@ -3,6 +3,7 @@
 ## Protected assets
 
 - Journal content, AI reflections, embeddings, and action items.
+- Optional location coordinates/labels and exported takeout files.
 - Authentication tokens and account sessions.
 - Gemini API key and Google Cloud service identity.
 - Database credentials and Keycloak administration credentials.
@@ -43,6 +44,8 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Structured AI JSON is parsed, deduplicated, count-limited, and length-limited.
 - React renders response text through JSX, not `dangerouslySetInnerHTML`.
 - RAG reference excerpts are capped at 500 characters.
+- Pagination limits and opaque cursors are validated; keyset queries remain UID-scoped.
+- Coordinates must be finite and within geographic ranges; labels are plain text and capped at 200 characters.
 
 ### Secrets
 
@@ -52,6 +55,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Cloud uses Application Default Credentials/workload identity and Secret Manager.
 - Gemini API keys are server-side only and sent in `x-goog-api-key`, not URL query strings.
 - Vite variables are limited to public Firebase/OIDC/browser configuration; no Gemini or service-account secret is accepted by the frontend.
+- Current Google Maps links are keyless. A future browser Maps key must be referrer/API/quota restricted; any server Maps key belongs in Secret Manager.
 
 ### Browser and transport
 
@@ -69,6 +73,8 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Authenticated quotas use the verified UID and return `429` with `Retry-After`.
 - AI-created goals remain `PROPOSED` until the user accepts or dismisses them.
 - Account deletion accepts no UID and removes only records owned by the verified principal.
+- Takeout accepts no UID, streams only user-visible owned records, sends `Cache-Control: no-store`, and excludes embeddings/internal jobs.
+- Browser geolocation requires an explicit click; location denial does not block entry creation.
 - Frontend and backend run as non-root container users and have health checks.
 
 ## Abuse cases and expected result
@@ -88,6 +94,9 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 | Flood AI endpoints with a valid account | Verified-UID quota returns `429` and `Retry-After` |
 | Request deletion with another UID | No UID exists in the contract; principal ownership controls deletion |
 | Expose a Gemini key in a browser bundle | No frontend configuration or code path accepts the key |
+| Guess or alter a page cursor | Cursor validation plus UID predicates/path scoping prevents ownership changes |
+| Read embeddings through takeout | Export schema deliberately excludes embeddings and internal processing data |
+| Capture location without consent | Browser API is invoked only by the location button; location is optional |
 
 ## Residual risks before public production
 
@@ -96,7 +105,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Add secret rotation procedures and validate rotation without restart if required.
 - Configure centralized audit logging, alerts, retention, and redaction review.
 - Run SAST, dependency/SBOM, container image, and DAST scans in CI.
-- Add export and documented retention windows; deletion is implemented but the broader privacy review and model-processing consent remain required.
+- Define retention windows and complete a broader model-processing/location consent review; export and deletion are implemented.
 - Decide whether application-layer encryption is required in addition to managed encryption at rest.
 - Add production Firebase App Check only as defense in depth; it does not replace authentication.
 - Test Firestore rules in the emulator and in a dedicated test project before launch.

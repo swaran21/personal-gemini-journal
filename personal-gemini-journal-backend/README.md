@@ -18,6 +18,8 @@ Spring Boot 3 REST API for authenticated journaling, private vector retrieval, a
 |---|---|
 | `security` | Local OIDC/cloud Firebase authentication, principal mapping, CORS, per-user quotas |
 | `account` | UID-scoped application-data and cloud identity deletion |
+| `export` | Streamed JSON/Markdown privacy takeout |
+| `reflection` | Grounded on-demand weekly reflection |
 | `chat` | Journal/RAG orchestration and accountability dispatch/outbox worker |
 | `gemini` | Provider-neutral AI ports plus Ollama and Gemini adapters |
 | `journal` | DTOs, models, persistence port, JDBC and Firestore adapters |
@@ -58,11 +60,15 @@ The worker claims jobs with `FOR UPDATE SKIP LOCKED`, reclaims stale jobs, appli
 
 AI suggestions start as `PROPOSED`. Only the user can PATCH them to `PENDING`; dismissal uses DELETE. This prevents autonomous model output from silently changing the user's accountability plan.
 
+Lists use stable keyset pagination with opaque `(createdAt,id)` cursors. Limits are validated from 1 to 100 and each adapter applies the cursor only after UID/path scoping. Optional locations are range-validated and stored on the owned entry. Weekly reflection loads one owned Monday-through-Sunday interval and skips AI when the week is empty.
+
 ## Availability, rate limits, and deletion
 
 The authenticated filter applies fixed-window quotas keyed by verified UID: 30 journal writes/hour, 20 RAG calls/hour, and 120 other API requests/minute by default. Responses include standard limit metadata and return `429` with `Retry-After`. These values are configurable through `JOURNAL_WRITES_PER_HOUR`, `RAG_QUERIES_PER_HOUR`, and `API_REQUESTS_PER_MINUTE`.
 
 `DELETE /api/account` accepts no UID. Local mode transactionally deletes action items, journal entries, and cascaded jobs; Keycloak remains the external identity authority. Cloud mode deletes isolated Firestore documents first and then deletes the Firebase identity. Data-first ordering avoids creating undeletable records if identity deletion fails.
+
+`GET /api/user/export` also accepts no UID and streams JSON or Markdown pages. It intentionally excludes embeddings, outbox records, internal errors, credentials, and UID. Responses are attachments with `Cache-Control: no-store`.
 
 ## Configuration
 
@@ -104,13 +110,15 @@ PORT
 
 | Method | Route | Request |
 |---|---|---|
-| POST | `/api/journal/entry` | `{ "content": "..." }` |
-| GET | `/api/journal/entries` | none |
+| POST | `/api/journal/entry` | `{ "content": "...", "location": { "latitude": 12.9, "longitude": 77.6, "label": "Library" } }`; location optional |
+| GET | `/api/journal/entries?limit=20&cursor=...` | cursor page |
 | POST | `/api/journal/entries/{id}/retry` | none; failed entries only |
 | POST | `/api/chat/rag` | `{ "query": "..." }` |
-| GET | `/api/action-items` | none |
+| POST | `/api/reflections/weekly` | `{ "timeZone": "Asia/Calcutta", "weekStart": "2026-08-24" }`; fields optional |
+| GET | `/api/action-items?limit=50&cursor=...` | cursor page |
 | PATCH | `/api/action-items/{id}` | `{ "status": "PENDING" | "COMPLETED" }` |
 | DELETE | `/api/action-items/{id}` | none |
+| GET | `/api/user/export?format=json|markdown` | streamed attachment |
 | DELETE | `/api/account` | none |
 | GET | `/actuator/health` | public |
 
@@ -124,7 +132,7 @@ The older `/api/chat` and `/api/journal-entries` routes remain compatibility end
 docker build --progress=plain -t personal-gemini-journal-backend .
 ```
 
-Unit tests cover sanitization, UID propagation, RAG scoping, error mapping, Firebase token failures, local JWT audience/subject validation, Ollama response parsing, outbox success/retry behavior, Firestore ID validation, and vector math. A pgvector integration test is enabled when Testcontainers can reach Docker. Root `scripts/local-smoke.ps1` performs the live authenticated two-user check.
+Unit tests cover sanitization, UID propagation, RAG scoping, weekly date windows/empty states, pagination cursor validation, location ranges, streamed export field minimization, error mapping, token failures, Ollama parsing, outbox retry behavior, Firestore ID validation, and vector math. A pgvector integration test is enabled when Testcontainers can reach Docker. Root `scripts/local-smoke.ps1` performs the live authenticated two-user check.
 
 ## Error contract
 

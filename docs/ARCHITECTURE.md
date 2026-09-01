@@ -9,6 +9,7 @@ The system is designed around four invariants:
 3. AI and persistence providers can change without changing HTTP contracts.
 4. Journal durability must not depend on AI availability.
 5. AI suggestions require user confirmation before becoming commitments.
+6. Location collection is opt-in and data export omits internal AI machinery.
 
 ## Component view
 
@@ -57,6 +58,16 @@ The controller always receives a `FirebasePrincipal`-shaped principal. In local 
 
 No global vector query exists. A user's query cannot retrieve another user's embedding or content.
 
+## Pagination, weekly reflection, and takeout
+
+Journal and action-item lists use opaque URL-safe cursors encoding only the final row's creation time and document ID. PostgreSQL applies tuple keyset predicates; Firestore uses ordered `startAfter` queries below the UID collection. Limits are restricted to `1..100`; cursors never carry or select identity.
+
+Weekly reflection resolves a client-provided IANA time zone, normalizes the requested date to Monday, loads at most 100 owned entries from that seven-day interval, and invokes AI only when entries exist. Results are generated on demand and are not silently scheduled, which avoids hidden AI cost.
+
+Data takeout streams JSON or Markdown while traversing UID-scoped pages. It exports journal text, reflection, processing state, approved location, and action items. Embeddings, outbox jobs, credentials, internal errors, and UID are excluded.
+
+Location is provided by the browser only after a user gesture, validated again by the backend, and stored with the journal entry. The UI opens a keyless Google Maps URL rather than loading a third-party map SDK or browser API key.
+
 ## Local accountability outbox
 
 ```text
@@ -82,7 +93,7 @@ Cloud mode currently follows the hackathon requirement with a Spring `@Async` po
 
 ### Local PostgreSQL
 
-`journal_entries` stores `user_id`, content, nullable AI response/vector, processing status/error, creation time, and version. `action_items` stores owner, optional source entry, goal, `PROPOSED/PENDING/COMPLETED` state, and creation time. `accountability_outbox` is internal and has no HTTP endpoint.
+`journal_entries` stores `user_id`, content, nullable AI response/vector, optional latitude/longitude/label, processing status/error, creation time, and version. `action_items` stores owner, optional source entry, goal, `PROPOSED/PENDING/COMPLETED` state, and creation time. `accountability_outbox` is internal and has no HTTP endpoint.
 
 ## Load and privacy controls
 
