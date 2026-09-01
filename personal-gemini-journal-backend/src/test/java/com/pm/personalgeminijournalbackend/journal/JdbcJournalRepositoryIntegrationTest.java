@@ -122,6 +122,18 @@ class JdbcJournalRepositoryIntegrationTest {
         assertEquals(location, second.items().get(0).location()); assertFalse(second.hasMore());
     }
 
+    @Test
+    void userAuthoredGoalIsPendingAndIsolatedFromOtherUsers() {
+        String owner = "manual-owner-" + UUID.randomUUID();
+        String other = "manual-other-" + UUID.randomUUID();
+        ActionItem created = inTransaction(() -> repository.createActionItem(owner, "Practice Java", Instant.parse("2026-09-01T12:00:00Z")));
+
+        assertEquals(ActionItem.Status.PENDING, created.status());
+        assertEquals(List.of("Practice Java"), inTransaction(() -> repository.listActionItems(owner)).stream().map(ActionItem::text).toList());
+        assertTrue(inTransaction(() -> repository.listActionItems(other)).isEmpty());
+        assertThrows(NoSuchElementException.class, () -> inTransaction(() -> { repository.setActionItemStatus(other, created.id(), ActionItem.Status.COMPLETED); return null; }));
+    }
+
     private static List<Double> embedding(double value) {
         return Collections.nCopies(768, value);
     }

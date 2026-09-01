@@ -12,6 +12,8 @@ public interface JournalRepository {
     void failEntryProcessing(String uid, String entryId, String safeError);
     JournalEntry retryEntryProcessing(String uid, String entryId, Instant now);
     void saveActionItems(String uid, List<String> goals, Instant now);
+    /** Creates a user-authored goal directly in PENDING state and returns its generated identifier. */
+    ActionItem createActionItem(String uid, String goal, Instant now);
     default void saveActionItems(String uid, String sourceEntryId, List<String> goals, Instant now) {
         saveActionItems(uid, goals, now);
     }

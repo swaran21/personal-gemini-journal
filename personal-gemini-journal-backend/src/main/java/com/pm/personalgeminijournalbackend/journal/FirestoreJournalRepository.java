@@ -54,6 +54,11 @@ public class FirestoreJournalRepository implements JournalRepository {
         for (String goal : goals) batch.set(actionItems(uid).document(), Map.of("text", goal, "status", "PROPOSED", "completed", false, "createdAt", now.toEpochMilli()));
         wait(batch.commit());
     }
+    @Override public ActionItem createActionItem(String uid, String goal, Instant now) {
+        var reference = actionItems(uid).document();
+        wait(reference.set(Map.of("text", goal, "status", "PENDING", "completed", false, "createdAt", now.toEpochMilli())));
+        return new ActionItem(reference.getId(), goal, ActionItem.Status.PENDING, now);
+    }
     @Override public List<JournalEntry> recentEntries(String uid, int maxResults) {
         try {
             return entries(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(maxResults).get().get().getDocuments().stream().map(d ->

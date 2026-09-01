@@ -34,7 +34,7 @@ class JournalControllerTest {
 
     @Test void actionControllerMapsStorageShapeAndStatus() {
         JournalRepository repository = mock(JournalRepository.class);
-        JournalController controller = new JournalController(repository);
+        JournalController controller = new JournalController(repository, mock(ActionItemService.class));
         when(repository.listActionItems("uid-1", 50, null)).thenReturn(new PageSlice<>(List.of(new ActionItem("id", "Write tests", ActionItem.Status.PROPOSED, Instant.EPOCH), new ActionItem("done", "Deploy", ActionItem.Status.COMPLETED, Instant.EPOCH)), null, false));
 
         PageSlice<ActionItemResponse> results = controller.actionItems(new FirebasePrincipal("uid-1"), 50, null);
@@ -55,7 +55,7 @@ class JournalControllerTest {
 
     @Test void paginationLimitsAreValidated() {
         JournalEntryController entries = new JournalEntryController(mock(ChatService.class), mock(JournalRepository.class));
-        JournalController actions = new JournalController(mock(JournalRepository.class));
+        JournalController actions = new JournalController(mock(JournalRepository.class), mock(ActionItemService.class));
         FirebasePrincipal principal = new FirebasePrincipal("uid");
         assertThrows(IllegalArgumentException.class, () -> entries.entries(principal, 0, null));
         assertThrows(IllegalArgumentException.class, () -> actions.actionItems(principal, 101, null));
@@ -63,7 +63,7 @@ class JournalControllerTest {
 
     @Test void actionControllerChangesOnlyCurrentUsersItem() {
         JournalRepository repository = mock(JournalRepository.class);
-        JournalController controller = new JournalController(repository);
+        JournalController controller = new JournalController(repository, mock(ActionItemService.class));
         FirebasePrincipal principal = new FirebasePrincipal("uid-1");
 
         assertEquals(204, controller.update(principal, "item-1", new JournalController.CompletionRequest("COMPLETED")).getStatusCode().value());
@@ -79,6 +79,21 @@ class JournalControllerTest {
     @Test void completionRequestRejectsInvalidAndNullStatuses() {
         assertThrows(IllegalArgumentException.class, () -> new JournalController.CompletionRequest("complete"));
         assertThrows(IllegalArgumentException.class, () -> new JournalController.CompletionRequest(null));
+    }
+
+    @Test void manualGoalCreationUsesOnlyAuthenticatedPrincipalUid() {
+        JournalRepository repository = mock(JournalRepository.class);
+        ActionItemService service = mock(ActionItemService.class);
+        JournalController controller = new JournalController(repository, service);
+        ActionItem created = new ActionItem("id", "Practice system design", ActionItem.Status.PENDING, Instant.EPOCH);
+        when(service.create("owner", "Practice system design")).thenReturn(created);
+
+        var response = controller.createActionItem(new FirebasePrincipal("owner"), new CreateActionItemRequest("Practice system design"));
+
+        assertEquals(201, response.getStatusCode().value());
+        assertEquals("PENDING", response.getBody().status());
+        verify(service).create("owner", "Practice system design");
+        verify(service, never()).create(eq("other-user"), anyString());
     }
 
     @Test void retryEndpointForwardsOnlyAuthenticatedUid() {

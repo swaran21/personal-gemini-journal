@@ -66,6 +66,14 @@ public class JdbcJournalRepository implements JournalRepository {
                 .param("id", UUID.randomUUID()).param("uid", uid).param("sourceId", sourceId).param("goal", goal).param("createdAt", Timestamp.from(now)).update();
     }
 
+    @Override @Transactional public ActionItem createActionItem(String uid, String goal, Instant now) {
+        scope(uid);
+        UUID id = UUID.randomUUID();
+        jdbc.sql("INSERT INTO action_items(id,user_id,source_entry_id,goal,completed,status,created_at) VALUES (:id,:uid,NULL,:goal,false,'PENDING',:createdAt)")
+                .param("id", id).param("uid", uid).param("goal", goal).param("createdAt", Timestamp.from(now)).update();
+        return new ActionItem(id.toString(), goal, ActionItem.Status.PENDING, now);
+    }
+
     @Override @Transactional(readOnly = true) public List<JournalEntry> recentEntries(String uid, int maxResults) {
         scope(uid);
         return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid ORDER BY created_at DESC,id DESC LIMIT :limit")
