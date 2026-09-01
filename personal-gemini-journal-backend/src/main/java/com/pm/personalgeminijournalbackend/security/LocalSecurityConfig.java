@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 
 import java.util.List;
 
@@ -47,10 +48,11 @@ public class LocalSecurityConfig {
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Subject is invalid", null));
     }
 
-    @Bean SecurityFilterChain localSecurityFilterChain(HttpSecurity http) throws Exception {
+    @Bean SecurityFilterChain localSecurityFilterChain(HttpSecurity http, UserRateLimitFilter rateLimitFilter) throws Exception {
         Converter<Jwt, AbstractAuthenticationToken> converter = jwt -> new UsernamePasswordAuthenticationToken(new FirebasePrincipal(jwt.getSubject()), jwt, List.of());
         return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health/**").permitAll().anyRequest().authenticated())
-                .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(converter))).build();
+                .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
+                .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class).build();
     }
 }

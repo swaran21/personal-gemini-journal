@@ -13,9 +13,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration @EnableWebSecurity
 @Profile("cloud")
 public class SecurityConfig {
-    @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, FirebaseAuthenticationFilter firebaseFilter) throws Exception {
+    @Bean SecurityFilterChain securityFilterChain(HttpSecurity http, FirebaseAuthenticationFilter firebaseFilter, UserRateLimitFilter rateLimitFilter) throws Exception {
         return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers("/actuator/health/**").permitAll().anyRequest().authenticated())
-                .addFilterBefore(firebaseFilter, UsernamePasswordAuthenticationFilter.class).build();
+                .addFilterBefore(firebaseFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, FirebaseAuthenticationFilter.class).build();
     }
 }
