@@ -60,6 +60,9 @@ public class ChatService {
         return new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(),
                 com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null, entry.location());
     }
+    public void dispatchUpdatedEntry(String uid, com.pm.personalgeminijournalbackend.journal.JournalEntry entry) {
+        accountability.dispatch(uid, entry.id(), entry.text(), entry.createdAt());
+    }
 
     private String excerpt(String text) {
         String normalized = text.replaceAll("\\s+", " ").trim();

@@ -54,6 +54,23 @@ public class JdbcJournalRepository implements JournalRepository {
                 .param("id", id).param("uid", uid).query((rs, row) -> entry(rs, List.of())).single();
     }
 
+    @Override @Transactional public JournalEntry updateEntryContent(String uid, String entryId, String text, GeoLocation location, Instant now) {
+        scope(uid); UUID id = uuid(entryId);
+        int changed = jdbc.sql("UPDATE journal_entries SET content=:content,ai_response=NULL,embedding=NULL,processing_status='PENDING',processing_error=NULL,latitude=:latitude,longitude=:longitude,location_label=:label,version=version+1 WHERE id=:id AND user_id=:uid")
+                .param("content", text).param("latitude", location == null ? null : location.latitude()).param("longitude", location == null ? null : location.longitude()).param("label", location == null ? null : location.label()).param("id", id).param("uid", uid).update();
+        if (changed == 0) throw new NoSuchElementException("Journal entry not found");
+        jdbc.sql("UPDATE accountability_outbox SET status='PENDING',attempts=0,available_at=:availableAt,locked_at=NULL,last_error=NULL,completed_at=NULL WHERE journal_entry_id=:entryId AND user_id=:uid")
+                .param("availableAt", Timestamp.from(now)).param("entryId", id).param("uid", uid).update();
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE id=:id AND user_id=:uid")
+                .param("id", id).param("uid", uid).query((rs, row) -> entry(rs, List.of())).single();
+    }
+
+    @Override @Transactional public void deleteJournalEntry(String uid, String entryId) {
+        scope(uid);
+        int changed = jdbc.sql("DELETE FROM journal_entries WHERE id=:id AND user_id=:uid").param("id", uuid(entryId)).param("uid", uid).update();
+        if (changed == 0) throw new NoSuchElementException("Journal entry not found");
+    }
+
     @Override @Transactional public void saveActionItems(String uid, List<String> goals, Instant now) {
         saveActionItems(uid, null, goals, now);
     }

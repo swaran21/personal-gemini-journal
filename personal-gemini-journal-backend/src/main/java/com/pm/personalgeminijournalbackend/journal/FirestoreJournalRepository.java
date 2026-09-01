@@ -48,6 +48,24 @@ public class FirestoreJournalRepository implements JournalRepository {
             throw new IllegalStateException("Firestore retry failed", e.getCause());
         }
     }
+    @Override public JournalEntry updateEntryContent(String uid, String entryId, String text, GeoLocation location, Instant now) {
+        String valid = validId(entryId); var reference = entries(uid).document(valid);
+        try {
+            var snapshot = reference.get().get();
+            if (!snapshot.exists()) throw new NoSuchElementException("Journal entry not found");
+            Map<String,Object> data = new HashMap<>(); data.put("text", text); data.put("response", null); data.put("embedding", List.of()); data.put("processingStatus", "PENDING"); data.put("processingError", null);
+            if (location == null) data.put("location", com.google.cloud.firestore.FieldValue.delete()); else data.put("location", Map.of("latitude", location.latitude(), "longitude", location.longitude(), "label", Objects.requireNonNullElse(location.label(), "")));
+            wait(reference.update(data));
+            return new JournalEntry(valid, text, null, Instant.ofEpochMilli(Objects.requireNonNullElse(snapshot.getLong("createdAt"), now.toEpochMilli())), List.of(), JournalEntry.ProcessingStatus.PENDING, null, location);
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore update interrupted", e); }
+        catch (ExecutionException e) { throw new IllegalStateException("Firestore update failed", e.getCause()); }
+    }
+    @Override public void deleteJournalEntry(String uid, String entryId) {
+        String valid = validId(entryId); var reference = entries(uid).document(valid);
+        try { if (!reference.get().get().exists()) throw new NoSuchElementException("Journal entry not found"); wait(reference.delete()); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore deletion interrupted", e); }
+        catch (ExecutionException e) { throw new IllegalStateException("Firestore deletion failed", e.getCause()); }
+    }
     @Override public void saveActionItems(String uid, List<String> goals, Instant now) {
         if (goals.isEmpty()) return;
         WriteBatch batch = firestore.batch();

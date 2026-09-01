@@ -109,4 +109,16 @@ class JournalControllerTest {
         assertEquals(pending, response.getBody());
         verify(chatService, never()).retryJournalEntry(eq("other-user"), anyString());
     }
+
+    @Test void editAndDeleteEndpointsUseOnlyAuthenticatedUid() {
+        ChatService chatService = mock(ChatService.class); JournalRepository repository = mock(JournalRepository.class);
+        JournalEntryController controller = new JournalEntryController(chatService, repository);
+        var updated = new JournalEntry("entry-1", "edited", null, Instant.EPOCH, List.of(), JournalEntry.ProcessingStatus.PENDING, null);
+        when(repository.updateEntryContent(eq("owner"), eq("entry-1"), eq("edited"), isNull(), any())).thenReturn(updated);
+        var response = controller.edit(new FirebasePrincipal("owner"), "entry-1", new JournalEntryRequest("edited", null));
+        assertEquals(202, response.getStatusCode().value());
+        controller.delete(new FirebasePrincipal("owner"), "entry-1");
+        verify(repository).deleteJournalEntry("owner", "entry-1");
+        verify(repository, never()).deleteJournalEntry(eq("other-user"), anyString());
+    }
 }

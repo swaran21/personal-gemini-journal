@@ -27,6 +27,13 @@ public class JournalEntryController {
         return new PageSlice<>(page.items().stream().map(this::response).toList(), page.nextCursor(), page.hasMore());
     }
     @PostMapping("/entries/{id}/retry") public ResponseEntity<JournalEntryResponse> retry(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id) { return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.retryJournalEntry(principal.uid(), id)); }
+    @PatchMapping("/entries/{id}") public ResponseEntity<JournalEntryResponse> edit(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id, @Valid @RequestBody JournalEntryRequest request) {
+        GeoLocation location = request.location() == null ? null : request.location().toLocation();
+        JournalEntry updated = repository.updateEntryContent(principal.uid(), id, request.content().trim(), location, java.time.Instant.now());
+        chatService.dispatchUpdatedEntry(principal.uid(), updated);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response(updated));
+    }
+    @DeleteMapping("/entries/{id}") public ResponseEntity<Void> delete(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id) { repository.deleteJournalEntry(principal.uid(), id); return ResponseEntity.noContent().build(); }
     private int bounded(int limit) { if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100"); return limit; }
     private JournalEntryResponse response(JournalEntry entry) { return new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(), entry.processingStatus(), entry.processingError(), entry.location()); }
 }

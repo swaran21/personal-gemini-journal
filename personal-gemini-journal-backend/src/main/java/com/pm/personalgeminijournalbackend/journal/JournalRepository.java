@@ -11,6 +11,10 @@ public interface JournalRepository {
     void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding);
     void failEntryProcessing(String uid, String entryId, String safeError);
     JournalEntry retryEntryProcessing(String uid, String entryId, Instant now);
+    /** Replaces content only for an entry owned by uid and resets AI processing. */
+    JournalEntry updateEntryContent(String uid, String entryId, String text, GeoLocation location, Instant now);
+    /** Deletes only an entry owned by uid. */
+    void deleteJournalEntry(String uid, String entryId);
     void saveActionItems(String uid, List<String> goals, Instant now);
     /** Creates a user-authored goal directly in PENDING state and returns its generated identifier. */
     ActionItem createActionItem(String uid, String goal, Instant now);
