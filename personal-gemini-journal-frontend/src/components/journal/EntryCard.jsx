@@ -4,10 +4,10 @@ import { api } from '../../api/client';
 import { dayLabel, timeLabel } from '../../utils/date';
 
 const tones = [
-  ['from-violet-500 to-indigo-500', 'bg-violet-50 text-violet-800', 'text-violet-500'],
-  ['from-rose-500 to-orange-400', 'bg-rose-50 text-rose-800', 'text-rose-500'],
-  ['from-cyan-500 to-blue-500', 'bg-cyan-50 text-cyan-800', 'text-cyan-600'],
-  ['from-emerald-500 to-teal-500', 'bg-emerald-50 text-emerald-800', 'text-emerald-600'],
+  ['from-[#4285F4] to-[#1967D2]', 'bg-[#E8F0FE] text-[#174EA6]', 'text-[#1967D2]'],
+  ['from-[#EA4335] to-[#D93025]', 'bg-[#FCE8E6] text-[#A50E0E]', 'text-[#D93025]'],
+  ['from-[#FBBC05] to-[#F9AB00]', 'bg-[#FEF7E0] text-[#B06000]', 'text-[#B06000]'],
+  ['from-[#34A853] to-[#188038]', 'bg-[#E6F4EA] text-[#137333]', 'text-[#137333]'],
 ];
 
 export function EntryCard({ entry, index = 0, onRetry, onChanged, onDeleted, setError }) {

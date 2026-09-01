@@ -74,7 +74,7 @@ export default function App() {
   if (!authReady) return <PageLoader fullScreen />;
   if (!user) return <LoginScreen initialError={error} />;
 
-  return <div className="min-h-screen bg-[radial-gradient(circle_at_10%_0%,#ede9fe_0,transparent_28%),radial-gradient(circle_at_90%_10%,#fef3c7_0,transparent_25%),linear-gradient(180deg,#fafafa_0%,#f8fafc_100%)] text-slate-800 selection:bg-violet-200">
+  return <div className="google-page-bg min-h-screen text-slate-800 selection:bg-[#D2E3FC]">
     <Header user={user} identity={identity} setError={setError} />
     <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
       <ViewTabs view={view} setView={setView} />
