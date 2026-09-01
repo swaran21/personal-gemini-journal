@@ -17,7 +17,7 @@ public class CorsConfig {
         config.setAllowedOrigins(Arrays.stream(properties.getAllowedOrigins().split(",")).map(String::trim).filter(origin -> !origin.isBlank()).toList());
         config.setAllowedMethods(List.of("POST", "PATCH", "DELETE", "GET", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-ID"));
-        config.setExposedHeaders(List.of("X-Request-ID"));
+        config.setExposedHeaders(List.of("X-Request-ID", "Content-Disposition", "Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"));
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", config); return source;
     }
