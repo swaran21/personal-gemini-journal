@@ -84,7 +84,7 @@ public class UserRateLimitFilter extends OncePerRequestFilter {
     private Policy policy(HttpServletRequest request) {
         String path = request.getRequestURI();
         if ("POST".equals(request.getMethod()) && "/api/journal/entry".equals(path)) return journalWrites;
-        if ("POST".equals(request.getMethod()) && "/api/chat/rag".equals(path)) return ragQueries;
+        if ("POST".equals(request.getMethod()) && ("/api/chat/rag".equals(path) || "/api/reflections/weekly".equals(path))) return ragQueries;
         return path.startsWith("/api/") ? ordinaryApi : null;
     }
 
