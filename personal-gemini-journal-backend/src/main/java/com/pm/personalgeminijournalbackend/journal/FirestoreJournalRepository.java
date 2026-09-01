@@ -30,6 +30,23 @@ public class FirestoreJournalRepository implements JournalRepository {
     @Override public void failEntryProcessing(String uid, String entryId, String safeError) {
         wait(entries(uid).document(validId(entryId)).update(Map.of("processingStatus", "FAILED", "processingError", safeError)));
     }
+    @Override public JournalEntry retryEntryProcessing(String uid, String entryId, Instant now) {
+        String valid = validId(entryId);
+        var reference = entries(uid).document(valid);
+        try {
+            var snapshot = reference.get().get();
+            if (!snapshot.exists() || !"FAILED".equals(snapshot.getString("processingStatus"))) {
+                throw new NoSuchElementException("Failed journal entry not found");
+            }
+            wait(reference.update(Map.of("processingStatus", "PENDING", "processingError", com.google.cloud.firestore.FieldValue.delete())));
+            return entry(snapshot, embedding(snapshot.get("embedding")));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Firestore retry interrupted", e);
+        } catch (ExecutionException e) {
+            throw new IllegalStateException("Firestore retry failed", e.getCause());
+        }
+    }
     @Override public void saveActionItems(String uid, List<String> goals, Instant now) {
         if (goals.isEmpty()) return;
         WriteBatch batch = firestore.batch();

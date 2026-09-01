@@ -17,4 +17,5 @@ public class JournalEntryController {
     public JournalEntryController(ChatService chatService, JournalRepository repository) { this.chatService = chatService; this.repository = repository; }
     @PostMapping("/entry") public ResponseEntity<JournalEntryResponse> create(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody JournalEntryRequest request) { return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.processJournalEntry(principal.uid(), request.content())); }
     @GetMapping("/entries") public List<JournalEntryResponse> entries(@AuthenticationPrincipal FirebasePrincipal principal) { return repository.listEntries(principal.uid()).stream().map(entry -> new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(), entry.processingStatus(), entry.processingError())).toList(); }
+    @PostMapping("/entries/{id}/retry") public ResponseEntity<JournalEntryResponse> retry(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id) { return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.retryJournalEntry(principal.uid(), id)); }
 }

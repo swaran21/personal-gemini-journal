@@ -64,6 +64,22 @@ class LocalAccountabilityWorkerTest {
         verify(journals, never()).completeEntryProcessing(anyString(), anyString(), anyString(), anyList());
     }
 
+    @Test
+    void optionalGoalFailureDoesNotDiscardSuccessfulReflection() {
+        var job = job(1);
+        when(outbox.entryContent(job)).thenReturn("entry");
+        when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
+        when(ai.reflect(eq("entry"), anyList())).thenReturn(new GeminiResult("reply", List.of()));
+        when(embeddings.embed("entry")).thenReturn(List.of(1d));
+        when(ai.extractActionItems("entry")).thenThrow(new IllegalStateException("optional model call failed"));
+
+        worker.process(job);
+
+        verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "reply", List.of(1d));
+        verify(outbox).markSucceeded(job);
+        verify(outbox, never()).markFailed(any(), any(), anyInt());
+    }
+
     private LocalAccountabilityOutboxRepository.Job job(int attempt) {
         return new LocalAccountabilityOutboxRepository.Job(UUID.randomUUID(), "uid-1", UUID.randomUUID(), attempt);
     }

@@ -62,4 +62,18 @@ class JournalControllerTest {
         assertThrows(IllegalArgumentException.class, () -> new JournalController.CompletionRequest("complete"));
         assertThrows(IllegalArgumentException.class, () -> new JournalController.CompletionRequest(null));
     }
+
+    @Test void retryEndpointForwardsOnlyAuthenticatedUid() {
+        ChatService chatService = mock(ChatService.class);
+        JournalRepository repository = mock(JournalRepository.class);
+        JournalEntryController controller = new JournalEntryController(chatService, repository);
+        var pending = new JournalEntryResponse("id", "stored", null, null, Instant.EPOCH, JournalEntry.ProcessingStatus.PENDING, null);
+        when(chatService.retryJournalEntry("uid-1", "id")).thenReturn(pending);
+
+        var response = controller.retry(new FirebasePrincipal("uid-1"), "id");
+
+        assertEquals(202, response.getStatusCode().value());
+        assertEquals(pending, response.getBody());
+        verify(chatService, never()).retryJournalEntry(eq("other-user"), anyString());
+    }
 }

@@ -9,6 +9,7 @@ public interface JournalRepository {
     String createPendingEntry(String uid, String text, Instant now);
     void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding);
     void failEntryProcessing(String uid, String entryId, String safeError);
+    JournalEntry retryEntryProcessing(String uid, String entryId, Instant now);
     void saveActionItems(String uid, List<String> goals, Instant now);
     default void saveActionItems(String uid, String sourceEntryId, List<String> goals, Instant now) {
         saveActionItems(uid, goals, now);

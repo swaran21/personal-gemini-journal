@@ -41,6 +41,18 @@ public class JdbcJournalRepository implements JournalRepository {
         if (changed == 0) throw new NoSuchElementException("Journal entry not found");
     }
 
+    @Override @Transactional public JournalEntry retryEntryProcessing(String uid, String entryId, Instant now) {
+        scope(uid);
+        UUID id = uuid(entryId);
+        int changed = jdbc.sql("UPDATE journal_entries SET processing_status='PENDING',processing_error=NULL,version=version+1 WHERE id=:id AND user_id=:uid AND processing_status='FAILED'")
+                .param("id", id).param("uid", uid).update();
+        if (changed == 0) throw new NoSuchElementException("Failed journal entry not found");
+        jdbc.sql("UPDATE accountability_outbox SET status='PENDING',attempts=0,available_at=:availableAt,locked_at=NULL,last_error=NULL,completed_at=NULL WHERE journal_entry_id=:entryId AND user_id=:uid")
+                .param("availableAt", Timestamp.from(now)).param("entryId", id).param("uid", uid).update();
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error FROM journal_entries WHERE id=:id AND user_id=:uid")
+                .param("id", id).param("uid", uid).query((rs, row) -> entry(rs, List.of())).single();
+    }
+
     @Override @Transactional public void saveActionItems(String uid, List<String> goals, Instant now) {
         saveActionItems(uid, null, goals, now);
     }

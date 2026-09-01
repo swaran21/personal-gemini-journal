@@ -32,6 +32,13 @@ public class ChatService {
         return new RagChatResponse(reply, references);
     }
 
+    public JournalEntryResponse retryJournalEntry(String uid, String entryId) {
+        var entry = journalRepository.retryEntryProcessing(uid, entryId, Instant.now());
+        accountability.dispatch(uid, entry.id(), entry.text(), entry.createdAt());
+        return new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(),
+                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null);
+    }
+
     private String excerpt(String text) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= 500 ? normalized : normalized.substring(0, 497) + "...";

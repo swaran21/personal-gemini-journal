@@ -60,8 +60,12 @@ public class LocalAccountabilityWorker {
                     .toList();
             var reflection = ai.reflect(entry, history);
             journalRepository.completeEntryProcessing(job.uid(), job.entryId().toString(), reflection.reply(), embeddings.embed(entry));
-            List<String> goals = ai.extractActionItems(entry);
-            journalRepository.saveActionItems(job.uid(), job.entryId().toString(), goals, Instant.now());
+            try {
+                List<String> goals = ai.extractActionItems(entry);
+                journalRepository.saveActionItems(job.uid(), job.entryId().toString(), goals, Instant.now());
+            } catch (RuntimeException optionalGoalFailure) {
+                log.warn("Reflection completed but goal suggestions could not be generated for job {}", job.id());
+            }
             outbox.markSucceeded(job);
         } catch (RuntimeException failure) {
             log.warn("Local accountability job {} failed on attempt {}", job.id(), job.attempt(), failure);

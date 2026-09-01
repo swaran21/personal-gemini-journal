@@ -46,4 +46,16 @@ class ChatServiceTest {
   RagChatResponse response = new ChatService(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", " question\u0000 ");
   assertEquals(500, response.referencedEntries().get(0).length()); assertTrue(response.referencedEntries().get(0).endsWith("..."));
  }
+
+ @Test void retryUsesOnlyStoredContentOwnedByAuthenticatedUser() {
+  GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
+  JournalEntry failed = new JournalEntry("entry-1", "stored private text", null, java.time.Instant.EPOCH, List.of(), JournalEntry.ProcessingStatus.FAILED, "unavailable");
+  when(repo.retryEntryProcessing(eq("uid-1"), eq("entry-1"), any())).thenReturn(failed);
+
+  var response = new ChatService(gemini, embeddings, repo, accountability).retryJournalEntry("uid-1", "entry-1");
+
+  assertEquals(JournalEntry.ProcessingStatus.PENDING, response.processingStatus());
+  verify(accountability).dispatch("uid-1", "entry-1", "stored private text", java.time.Instant.EPOCH);
+  verify(repo, never()).retryEntryProcessing(eq("other-user"), anyString(), any());
+ }
 }

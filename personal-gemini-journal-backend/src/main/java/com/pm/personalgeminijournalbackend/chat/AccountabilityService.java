@@ -26,8 +26,12 @@ public class AccountabilityService implements AccountabilityDispatcher {
                 var history = repository.recentEntries(uid, 11).stream().filter(item -> !item.id().equals(entryId)).limit(10).toList();
                 var reflection = gemini.reflect(entry, history);
                 repository.completeEntryProcessing(uid, entryId, reflection.reply(), embeddings.embed(entry));
-                List<String> goals = gemini.extractActionItems(entry);
-                repository.saveActionItems(uid, entryId, goals, createdAt);
+                try {
+                    List<String> goals = gemini.extractActionItems(entry);
+                    repository.saveActionItems(uid, entryId, goals, createdAt);
+                } catch (RuntimeException optionalGoalFailure) {
+                    log.warn("Reflection completed but optional goal suggestions failed for entry {}", entryId);
+                }
                 return;
             } catch (RuntimeException exception) {
                 if (attempt == 3) {
