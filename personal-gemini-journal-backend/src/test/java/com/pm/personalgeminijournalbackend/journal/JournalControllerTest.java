@@ -16,11 +16,13 @@ class JournalControllerTest {
         JournalRepository repository = mock(JournalRepository.class);
         JournalEntryController controller = new JournalEntryController(chatService, repository);
         FirebasePrincipal principal = new FirebasePrincipal("uid-1");
-        JournalEntryResponse created = new JournalEntryResponse("id", "text", "reply", null, Instant.EPOCH);
+        JournalEntryResponse created = new JournalEntryResponse("id", "text", null, null, Instant.EPOCH, JournalEntry.ProcessingStatus.PENDING, null);
         when(chatService.processJournalEntry("uid-1", "text")).thenReturn(created);
-        when(repository.listEntries("uid-1")).thenReturn(List.of(new JournalEntry("id", "text", "reply", Instant.EPOCH, List.of(1d))));
+        when(repository.listEntries("uid-1")).thenReturn(List.of(new JournalEntry("id", "text", "reply", Instant.EPOCH, List.of(1d), JournalEntry.ProcessingStatus.COMPLETED, null)));
 
-        assertEquals(created, controller.create(principal, new JournalEntryRequest("text")).getBody());
+        var createResponse = controller.create(principal, new JournalEntryRequest("text"));
+        assertEquals(created, createResponse.getBody());
+        assertEquals(202, createResponse.getStatusCode().value());
         List<JournalEntryResponse> entries = controller.entries(principal);
 
         assertEquals("text", entries.get(0).content());

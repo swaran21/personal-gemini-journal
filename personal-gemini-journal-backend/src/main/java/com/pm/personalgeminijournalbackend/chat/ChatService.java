@@ -1,6 +1,5 @@
 package com.pm.personalgeminijournalbackend.chat;
 
-import com.pm.personalgeminijournalbackend.gemini.GeminiResult;
 import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
 import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
@@ -19,11 +18,11 @@ public class ChatService {
     }
     public JournalEntryResponse processJournalEntry(String uid, String rawEntry) {
         String entry = sanitize(rawEntry);
-        GeminiResult result = gemini.reflect(entry, journalRepository.recentEntries(uid, 10));
         Instant now = Instant.now();
-        String id = journalRepository.saveEntry(uid, entry, result.reply(), embeddings.embed(entry), now);
+        String id = journalRepository.createPendingEntry(uid, entry, now);
         accountability.dispatch(uid, id, entry, now);
-        return new JournalEntryResponse(id, entry, result.reply(), null, now);
+        return new JournalEntryResponse(id, entry, null, null, now,
+                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null);
     }
     public RagChatResponse chatWithPastSelf(String uid, String rawQuestion) {
         String question = sanitize(rawQuestion);

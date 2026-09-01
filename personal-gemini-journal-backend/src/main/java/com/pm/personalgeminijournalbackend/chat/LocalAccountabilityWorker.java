@@ -1,6 +1,7 @@
 package com.pm.personalgeminijournalbackend.chat;
 
 import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
+import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ public class LocalAccountabilityWorker {
     private final LocalAccountabilityOutboxRepository outbox;
     private final JournalRepository journalRepository;
     private final GenerativeAiService ai;
+    private final EmbeddingService embeddings;
     private final int batchSize;
     private final int maxAttempts;
 
@@ -27,11 +29,13 @@ public class LocalAccountabilityWorker {
             LocalAccountabilityOutboxRepository outbox,
             JournalRepository journalRepository,
             GenerativeAiService ai,
+            EmbeddingService embeddings,
             @Value("${app.accountability.batch-size:5}") int batchSize,
             @Value("${app.accountability.max-attempts:5}") int maxAttempts) {
         this.outbox = outbox;
         this.journalRepository = journalRepository;
         this.ai = ai;
+        this.embeddings = embeddings;
         this.batchSize = Math.max(1, Math.min(batchSize, 25));
         this.maxAttempts = Math.max(1, Math.min(maxAttempts, 10));
     }
@@ -50,12 +54,21 @@ public class LocalAccountabilityWorker {
     void process(LocalAccountabilityOutboxRepository.Job job) {
         try {
             String entry = outbox.entryContent(job);
+            var history = journalRepository.recentEntries(job.uid(), 11).stream()
+                    .filter(item -> !item.id().equals(job.entryId().toString()))
+                    .limit(10)
+                    .toList();
+            var reflection = ai.reflect(entry, history);
+            journalRepository.completeEntryProcessing(job.uid(), job.entryId().toString(), reflection.reply(), embeddings.embed(entry));
             List<String> goals = ai.extractActionItems(entry);
             journalRepository.saveActionItems(job.uid(), job.entryId().toString(), goals, Instant.now());
             outbox.markSucceeded(job);
         } catch (RuntimeException failure) {
             log.warn("Local accountability job {} failed on attempt {}", job.id(), job.attempt(), failure);
             outbox.markFailed(job, failure, maxAttempts);
+            if (job.attempt() >= maxAttempts) {
+                journalRepository.failEntryProcessing(job.uid(), job.entryId().toString(), "AI processing is temporarily unavailable. You can retry later.");
+            }
         }
     }
 }

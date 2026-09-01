@@ -19,6 +19,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const refreshEntries = useCallback(async () => {
+    const journalEntries = await api('/api/journal/entries');
+    setEntries(journalEntries);
+    return journalEntries;
+  }, []);
+
   const refreshActionItems = useCallback(async () => {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 2000));
@@ -62,7 +68,7 @@ export default function App() {
     <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
       <ViewTabs view={view} setView={setView} />
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
-      {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshItems={refreshActionItems} loading={loading} setError={setError} />}
+      {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshEntries={refreshEntries} refreshItems={refreshActionItems} loading={loading} setError={setError} />}
       {view === 'rag' && <RagView setError={setError} />}
       {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} />}
     </main>

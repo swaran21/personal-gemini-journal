@@ -1,6 +1,8 @@
 package com.pm.personalgeminijournalbackend.chat;
 
 import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
+import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
+import com.pm.personalgeminijournalbackend.gemini.GeminiResult;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +18,8 @@ class LocalAccountabilityWorkerTest {
     private final LocalAccountabilityOutboxRepository outbox = mock(LocalAccountabilityOutboxRepository.class);
     private final JournalRepository journals = mock(JournalRepository.class);
     private final GenerativeAiService ai = mock(GenerativeAiService.class);
-    private final LocalAccountabilityWorker worker = new LocalAccountabilityWorker(outbox, journals, ai, 5, 3);
+    private final EmbeddingService embeddings = mock(EmbeddingService.class);
+    private final LocalAccountabilityWorker worker = new LocalAccountabilityWorker(outbox, journals, ai, embeddings, 5, 3);
 
     @Test
     void stopsPollingWhenNoWorkIsAvailable() {
@@ -25,7 +28,7 @@ class LocalAccountabilityWorkerTest {
         worker.processAvailable();
 
         verify(outbox).claimNext();
-        verifyNoInteractions(journals, ai);
+        verifyNoInteractions(journals, ai, embeddings);
     }
 
     @Test
@@ -33,10 +36,14 @@ class LocalAccountabilityWorkerTest {
         var job = job(1);
         when(outbox.claimNext()).thenReturn(Optional.of(job), Optional.empty());
         when(outbox.entryContent(job)).thenReturn("I will finish the portfolio");
+        when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
+        when(ai.reflect(any(), anyList())).thenReturn(new GeminiResult("You have a clear next step.", List.of()));
+        when(embeddings.embed(any())).thenReturn(List.of(1d));
         when(ai.extractActionItems(any())).thenReturn(List.of("Finish the portfolio"));
 
         worker.processAvailable();
 
+        verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "You have a clear next step.", List.of(1d));
         verify(journals).saveActionItems(eq("uid-1"), eq(job.entryId().toString()), eq(List.of("Finish the portfolio")), any());
         verify(outbox).markSucceeded(job);
         verify(outbox, never()).markFailed(any(), any(), anyInt());
@@ -46,13 +53,15 @@ class LocalAccountabilityWorkerTest {
     void returnsFailuresToTheOutboxRetryPolicy() {
         var job = job(2);
         when(outbox.entryContent(job)).thenReturn("entry");
-        when(ai.extractActionItems("entry")).thenThrow(new IllegalStateException("model unavailable"));
+        when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
+        when(ai.reflect(eq("entry"), anyList())).thenThrow(new IllegalStateException("model unavailable"));
 
         worker.process(job);
 
         verify(outbox).markFailed(eq(job), any(IllegalStateException.class), eq(3));
         verify(outbox, never()).markSucceeded(job);
-        verifyNoInteractions(journals);
+        verify(journals).recentEntries("uid-1", 11);
+        verify(journals, never()).completeEntryProcessing(anyString(), anyString(), anyString(), anyList());
     }
 
     private LocalAccountabilityOutboxRepository.Job job(int attempt) {

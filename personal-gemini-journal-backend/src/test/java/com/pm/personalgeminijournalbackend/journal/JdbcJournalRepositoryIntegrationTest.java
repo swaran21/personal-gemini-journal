@@ -45,8 +45,8 @@ class JdbcJournalRepositoryIntegrationTest {
 
     @Test
     void rowLevelSecurityAndUidPredicatesPreventCrossUserAccess() {
-        String firstId = inTransaction(() -> repository.saveEntry("user-a", "first", "reply-a", embedding(1d), Instant.parse("2026-01-01T00:00:00Z")));
-        inTransaction(() -> repository.saveEntry("user-b", "second", "reply-b", embedding(0.5d), Instant.parse("2026-01-02T00:00:00Z")));
+        String firstId = createComplete("user-a", "first", "reply-a", embedding(1d), Instant.parse("2026-01-01T00:00:00Z"));
+        createComplete("user-b", "second", "reply-b", embedding(0.5d), Instant.parse("2026-01-02T00:00:00Z"));
         inTransaction(() -> {
             repository.saveActionItems("user-a", firstId, List.of("private goal"), Instant.now());
             return null;
@@ -63,8 +63,8 @@ class JdbcJournalRepositoryIntegrationTest {
 
     @Test
     void vectorRetrievalReturnsOnlyTheAuthenticatedUsersMemory() {
-        inTransaction(() -> repository.saveEntry("owner", "closest", "reply", embedding(1d), Instant.now()));
-        inTransaction(() -> repository.saveEntry("other", "must never leak", "reply", embedding(1d), Instant.now()));
+        createComplete("owner", "closest", "reply", embedding(1d), Instant.now());
+        createComplete("other", "must never leak", "reply", embedding(1d), Instant.now());
 
         List<JournalEntry> matches = inTransaction(() -> repository.findRelevant("owner", embedding(1d), 5));
 
@@ -74,6 +74,12 @@ class JdbcJournalRepositoryIntegrationTest {
 
     private static List<Double> embedding(double value) {
         return Collections.nCopies(768, value);
+    }
+
+    private static String createComplete(String uid, String text, String reply, List<Double> embedding, Instant createdAt) {
+        String id = inTransaction(() -> repository.createPendingEntry(uid, text, createdAt));
+        inTransaction(() -> { repository.completeEntryProcessing(uid, id, reply, embedding); return null; });
+        return id;
     }
 
     private static <T> T inTransaction(java.util.concurrent.Callable<T> work) {

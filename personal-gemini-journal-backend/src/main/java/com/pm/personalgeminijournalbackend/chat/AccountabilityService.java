@@ -1,6 +1,7 @@
 package com.pm.personalgeminijournalbackend.chat;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
+import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.context.annotation.Profile;
@@ -16,18 +17,22 @@ public class AccountabilityService implements AccountabilityDispatcher {
     private static final Logger log = LoggerFactory.getLogger(AccountabilityService.class);
     private final JournalRepository repository;
     private final GenerativeAiService gemini;
-    public AccountabilityService(JournalRepository repository, GenerativeAiService gemini) { this.repository = repository; this.gemini = gemini; }
+    private final EmbeddingService embeddings;
+    public AccountabilityService(JournalRepository repository, GenerativeAiService gemini, EmbeddingService embeddings) { this.repository = repository; this.gemini = gemini; this.embeddings = embeddings; }
     @Async("accountabilityExecutor")
     public void dispatch(String uid, String entryId, String entry, Instant createdAt) {
-        List<String> goals = gemini.extractActionItems(entry);
-        if (goals.isEmpty()) return;
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
-                repository.saveActionItems(uid, goals, createdAt);
+                var history = repository.recentEntries(uid, 11).stream().filter(item -> !item.id().equals(entryId)).limit(10).toList();
+                var reflection = gemini.reflect(entry, history);
+                repository.completeEntryProcessing(uid, entryId, reflection.reply(), embeddings.embed(entry));
+                List<String> goals = gemini.extractActionItems(entry);
+                repository.saveActionItems(uid, entryId, goals, createdAt);
                 return;
             } catch (RuntimeException exception) {
                 if (attempt == 3) {
-                    log.error("Could not persist {} extracted action items after {} attempts", goals.size(), attempt, exception);
+                    log.error("Could not process journal entry after {} attempts", attempt, exception);
+                    repository.failEntryProcessing(uid, entryId, "AI processing is temporarily unavailable. You can retry later.");
                     return;
                 }
                 log.warn("Action-item persistence failed; retrying (attempt {}/3)", attempt, exception);

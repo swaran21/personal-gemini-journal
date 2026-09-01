@@ -18,10 +18,17 @@ public class FirestoreJournalRepository implements JournalRepository {
     private com.google.cloud.firestore.CollectionReference entries(String uid) { return firestore.collection("users").document(uid).collection("journal_entries"); }
     private com.google.cloud.firestore.CollectionReference actionItems(String uid) { return firestore.collection("users").document(uid).collection("action_items"); }
 
-    @Override public String saveEntry(String uid, String text, String reply, List<Double> embedding, Instant now) {
+    @Override public String createPendingEntry(String uid, String text, Instant now) {
         var ref = entries(uid).document();
-        Map<String, Object> data = new HashMap<>(); data.put("text", text); data.put("response", reply); data.put("embedding", embedding); data.put("createdAt", now.toEpochMilli());
+        Map<String, Object> data = new HashMap<>(); data.put("text", text); data.put("response", null); data.put("embedding", List.of()); data.put("processingStatus", "PENDING"); data.put("processingError", null); data.put("createdAt", now.toEpochMilli());
         wait(ref.set(data)); return ref.getId();
+    }
+    @Override public void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding) {
+        wait(entries(uid).document(validId(entryId)).update(Map.of(
+                "response", reply, "embedding", embedding, "processingStatus", "COMPLETED", "processingError", com.google.cloud.firestore.FieldValue.delete())));
+    }
+    @Override public void failEntryProcessing(String uid, String entryId, String safeError) {
+        wait(entries(uid).document(validId(entryId)).update(Map.of("processingStatus", "FAILED", "processingError", safeError)));
     }
     @Override public void saveActionItems(String uid, List<String> goals, Instant now) {
         if (goals.isEmpty()) return;
@@ -32,14 +39,14 @@ public class FirestoreJournalRepository implements JournalRepository {
     @Override public List<JournalEntry> recentEntries(String uid, int maxResults) {
         try {
             return entries(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(maxResults).get().get().getDocuments().stream().map(d ->
-                    new JournalEntry(d.getId(), d.getString("text"), d.getString("response"), Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)), List.of())).toList();
+                    entry(d, List.of())).toList();
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
     private List<JournalEntry> entriesWithEmbeddings(String uid, int maxResults) {
         try {
             return entries(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(maxResults).get().get().getDocuments().stream().map(d ->
-                    new JournalEntry(d.getId(), d.getString("text"), d.getString("response"), Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)), embedding(d.get("embedding")))).toList();
+                    entry(d, embedding(d.get("embedding")))).toList();
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
@@ -60,6 +67,12 @@ public class FirestoreJournalRepository implements JournalRepository {
     @Override public void deleteActionItem(String uid, String id) { String valid = validId(id); wait(actionItems(uid).document(valid).delete()); }
     private String validId(String id) { if (id == null || !id.matches("[A-Za-z0-9_-]{1,128}")) throw new IllegalArgumentException("Invalid document id"); return id; }
     private List<Double> embedding(Object value) { if (!(value instanceof List<?> values)) return List.of(); return values.stream().filter(Number.class::isInstance).map(Number.class::cast).map(Number::doubleValue).toList(); }
+    private JournalEntry entry(com.google.cloud.firestore.DocumentSnapshot document, List<Double> embedding) {
+        String rawStatus = Objects.requireNonNullElse(document.getString("processingStatus"), "COMPLETED");
+        return new JournalEntry(document.getId(), document.getString("text"), document.getString("response"),
+                Instant.ofEpochMilli(Objects.requireNonNullElse(document.getLong("createdAt"), 0L)), embedding,
+                JournalEntry.ProcessingStatus.valueOf(rawStatus), document.getString("processingError"));
+    }
     private double cosine(List<Double> left, List<Double> right) {
         if (left.isEmpty() || left.size() != right.size()) return -1d;
         double dot = 0d, lm = 0d, rm = 0d; for (int i = 0; i < left.size(); i++) { dot += left.get(i) * right.get(i); lm += left.get(i) * left.get(i); rm += right.get(i) * right.get(i); }

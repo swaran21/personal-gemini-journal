@@ -5,7 +5,10 @@ import java.util.List;
 
 /** Persistence port. Every implementation must scope every operation to the supplied authenticated UID. */
 public interface JournalRepository {
-    String saveEntry(String uid, String text, String reply, List<Double> embedding, Instant now);
+    /** Persists the user's text before any AI provider is invoked. */
+    String createPendingEntry(String uid, String text, Instant now);
+    void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding);
+    void failEntryProcessing(String uid, String entryId, String safeError);
     void saveActionItems(String uid, List<String> goals, Instant now);
     default void saveActionItems(String uid, String sourceEntryId, List<String> goals, Instant now) {
         saveActionItems(uid, goals, now);

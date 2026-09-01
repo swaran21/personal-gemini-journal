@@ -52,6 +52,6 @@ class GeminiEmbeddingServiceTest {
     }
 
     private JournalEntry entry(String id, List<Double> embedding) {
-        return new JournalEntry(id, "text", "response", Instant.EPOCH, embedding);
+        return new JournalEntry(id, "text", "response", Instant.EPOCH, embedding, JournalEntry.ProcessingStatus.COMPLETED, null);
     }
 }
