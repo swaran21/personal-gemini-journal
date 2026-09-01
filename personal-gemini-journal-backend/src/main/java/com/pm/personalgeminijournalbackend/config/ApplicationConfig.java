@@ -24,9 +24,10 @@ public class ApplicationConfig {
     }
 
     public static class GeminiProperties {
-        private String apiKeySecret; private String model = "gemini-3.6-flash"; private String embeddingModel = "gemini-embedding-001"; private int embeddingDimensions = 768;
+        private String apiKeySecret; private String model = "gemini-3.5-flash-lite"; private String fallbackModel = "gemini-3.1-flash-lite"; private String embeddingModel = "gemini-embedding-2"; private int embeddingDimensions = 768;
         public String getApiKeySecret() { return apiKeySecret; } public void setApiKeySecret(String v) { apiKeySecret = v; }
         public String getModel() { return model; } public void setModel(String v) { model = v; }
+        public String getFallbackModel() { return fallbackModel; } public void setFallbackModel(String v) { fallbackModel = v; }
         public String getEmbeddingModel() { return embeddingModel; } public void setEmbeddingModel(String v) { embeddingModel = v; }
         public int getEmbeddingDimensions() { return embeddingDimensions; } public void setEmbeddingDimensions(int v) { embeddingDimensions = v; }
     }

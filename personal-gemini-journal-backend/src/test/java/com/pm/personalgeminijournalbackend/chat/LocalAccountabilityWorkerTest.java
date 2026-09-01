@@ -37,14 +37,14 @@ class LocalAccountabilityWorkerTest {
         when(outbox.claimNext()).thenReturn(Optional.of(job), Optional.empty());
         when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("I will finish the portfolio", "I will finish the portfolio"));
         when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
-        when(ai.reflect(any(), anyList())).thenReturn(new GeminiResult("You have a clear next step.", List.of()));
+        when(ai.reflect(any(), anyList())).thenReturn(new GeminiResult("You have a clear next step.", List.of("Finish the portfolio")));
         when(embeddings.embed(any())).thenReturn(List.of(1d));
-        when(ai.extractActionItems(any())).thenReturn(List.of("Finish the portfolio"));
 
         worker.processAvailable();
 
         verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "You have a clear next step.", List.of(1d));
         verify(journals).saveActionItems(eq("uid-1"), eq(job.entryId().toString()), eq(List.of("Finish the portfolio")), any());
+        verify(ai, never()).extractActionItems(anyString());
         verify(outbox).markSucceeded(job);
         verify(outbox, never()).markFailed(any(), any(), anyInt());
     }
@@ -65,17 +65,17 @@ class LocalAccountabilityWorkerTest {
     }
 
     @Test
-    void optionalGoalFailureDoesNotDiscardSuccessfulReflection() {
+    void savesProposalsReturnedWithTheSuccessfulReflection() {
         var job = job(1);
         when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("entry", "entry"));
         when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
-        when(ai.reflect(eq("entry"), anyList())).thenReturn(new GeminiResult("reply", List.of()));
+        when(ai.reflect(eq("entry"), anyList())).thenReturn(new GeminiResult("reply", List.of("Write the security tests")));
         when(embeddings.embed("entry")).thenReturn(List.of(1d));
-        when(ai.extractActionItems("entry")).thenThrow(new IllegalStateException("optional model call failed"));
 
         worker.process(job);
 
         verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "reply", List.of(1d));
+        verify(journals).saveActionItems(eq("uid-1"), eq(job.entryId().toString()), eq(List.of("Write the security tests")), any());
         verify(outbox).markSucceeded(job);
         verify(outbox, never()).markFailed(any(), any(), anyInt());
     }

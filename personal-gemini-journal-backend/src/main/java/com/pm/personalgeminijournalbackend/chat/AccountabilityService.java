@@ -29,12 +29,7 @@ public class AccountabilityService implements AccountabilityDispatcher {
                 try { vector = embeddings.embed(entry); }
                 catch (RuntimeException embeddingFailure) { log.warn("Embedding unavailable for entry {}; reflection will still be saved", entryId); vector = null; }
                 repository.completeEntryProcessing(uid, entryId, reflection.reply(), vector);
-                try {
-                    List<String> goals = gemini.extractActionItems(entry);
-                    repository.saveActionItems(uid, entryId, goals, createdAt);
-                } catch (RuntimeException optionalGoalFailure) {
-                    log.warn("Reflection completed but optional goal suggestions failed for entry {}", entryId);
-                }
+                repository.saveActionItems(uid, entryId, reflection.actionItems(), createdAt);
                 return;
             } catch (RuntimeException exception) {
                 if (attempt == 3) {

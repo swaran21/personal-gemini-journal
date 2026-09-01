@@ -19,9 +19,8 @@ class AccountabilityServiceTest {
 
     private void aiSucceeds(List<String> goals) {
         when(repository.recentEntries(anyString(), eq(11))).thenReturn(List.of());
-        when(gemini.reflect(anyString(), anyList())).thenReturn(new GeminiResult("Reflective reply", List.of()));
+        when(gemini.reflect(anyString(), anyList())).thenReturn(new GeminiResult("Reflective reply", goals));
         when(embeddings.embed(anyString())).thenReturn(List.of(1d));
-        when(gemini.extractActionItems(anyString())).thenReturn(goals);
     }
 
     @Test void doesNotWriteWhenGeminiFindsNoGoals() {
@@ -35,6 +34,7 @@ class AccountabilityServiceTest {
         aiSucceeds(List.of("Finish portfolio"));
         service.dispatch("uid-1", "entry-id", "reflection", Instant.EPOCH);
         verify(repository).saveActionItems("uid-1", "entry-id", List.of("Finish portfolio"), Instant.EPOCH);
+        verify(gemini, never()).extractActionItems(anyString());
     }
 
     @Test void retriesPersistenceThenSucceeds() {

@@ -67,7 +67,7 @@ class GeminiEmbeddingServiceTest {
 
     @Test void requestsConfigured768DimensionsAndNormalizesGeminiEmbedding() {
         String vector = "[" + "1,".repeat(767) + "1]";
-        server.expect(once(), requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"))
+        server.expect(once(), requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent"))
                 .andExpect(header("x-goog-api-key", "runtime-key"))
                 .andExpect(content().string(containsString("\"outputDimensionality\":768")))
                 .andRespond(withSuccess("{\"embedding\":{\"values\":" + vector + "}}", MediaType.APPLICATION_JSON));

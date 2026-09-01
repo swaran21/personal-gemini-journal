@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
@@ -72,6 +73,17 @@ public class FirestoreJournalRepository implements JournalRepository {
         if (goals.isEmpty()) return;
         WriteBatch batch = firestore.batch();
         for (String goal : goals) batch.set(actionItems(uid).document(), Map.of("text", goal, "status", "PROPOSED", "completed", false, "createdAt", now.toEpochMilli()));
+        wait(batch.commit());
+    }
+    @Override public void saveActionItems(String uid, String sourceEntryId, List<String> goals, Instant now) {
+        if (goals == null || goals.isEmpty()) return;
+        if (sourceEntryId == null || sourceEntryId.isBlank()) { saveActionItems(uid, goals, now); return; }
+        String source = validId(sourceEntryId);
+        WriteBatch batch = firestore.batch();
+        for (String goal : goals.stream().filter(Objects::nonNull).map(String::trim).filter(value -> !value.isBlank() && value.length() <= 1000).distinct().limit(10).toList()) {
+            String documentId = UUID.nameUUIDFromBytes((source + "\u0000" + goal).getBytes(StandardCharsets.UTF_8)).toString();
+            batch.set(actionItems(uid).document(documentId), Map.of("text", goal, "sourceEntryId", source, "status", "PROPOSED", "completed", false, "createdAt", now.toEpochMilli()));
+        }
         wait(batch.commit());
     }
     @Override public ActionItem createActionItem(String uid, String goal, Instant now) {
