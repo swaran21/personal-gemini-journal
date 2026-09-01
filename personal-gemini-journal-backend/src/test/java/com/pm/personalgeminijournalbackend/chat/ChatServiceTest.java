@@ -99,4 +99,14 @@ class ChatServiceTest {
   assertEquals(ChatTurn.Role.ASSISTANT, captor.getValue().conversation().get(1).role());
   assertEquals(2, captor.getValue().conversation().size());
  }
+
+ @Test void fallsBackToScopedTextSearchWhenEmbeddingQuotaIsUnavailable() {
+  GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
+  JournalEntry entry = new JournalEntry("entry-1", "Dinner near Cubbon Park", "reply", Instant.EPOCH, List.of(), JournalEntry.ProcessingStatus.COMPLETED, null, new com.pm.personalgeminijournalbackend.journal.GeoLocation(12.9, 77.6, "Cubbon Park"));
+  when(embeddings.embed("Where did I go near Cubbon Park?")).thenThrow(new IllegalStateException("quota"));
+  when(repo.findTextRelevant("uid-1", "Where did I go near Cubbon Park?", 5)).thenReturn(List.of(entry));
+  when(gemini.answerWithGrounding(any(RagContext.class))).thenReturn("You were near Cubbon Park.");
+  assertEquals("You were near Cubbon Park.", service(gemini, embeddings, repo, accountability).chatWithPastSelf("uid-1", "Where did I go near Cubbon Park? ").reply());
+  verify(repo).findTextRelevant("uid-1", "Where did I go near Cubbon Park?", 5);
+ }
 }

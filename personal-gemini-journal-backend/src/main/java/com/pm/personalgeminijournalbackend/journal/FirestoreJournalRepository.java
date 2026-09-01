@@ -104,6 +104,13 @@ public class FirestoreJournalRepository implements JournalRepository {
                 .map(entry -> Map.entry(entry, cosine(queryEmbedding, entry.embedding()))).filter(entry -> entry.getValue() >= 0.55d)
                 .sorted(Map.Entry.<JournalEntry, Double>comparingByValue().reversed()).limit(Math.max(1, Math.min(limit, 10))).map(Map.Entry::getKey).toList();
     }
+    @Override public List<JournalEntry> findTextRelevant(String uid, String query, int limit) {
+        String[] terms = query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+");
+        return entriesWithEmbeddings(uid, 100).stream().filter(entry -> {
+            String haystack = (entry.text() + " " + (entry.location() == null ? "" : Objects.toString(entry.location().label(), ""))).toLowerCase(Locale.ROOT);
+            return Arrays.stream(terms).filter(term -> term.length() > 2).anyMatch(haystack::contains);
+        }).limit(Math.max(1, Math.min(limit, 10))).toList();
+    }
     @Override public PageSlice<JournalEntry> listEntries(String uid, int limit, String cursor) {
         int pageSize = Math.max(1, Math.min(limit, 100)); PageCursor.Decoded decoded = PageCursor.decode(cursor);
         Query query = entries(uid).orderBy("createdAt", Query.Direction.DESCENDING)

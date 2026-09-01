@@ -25,7 +25,10 @@ public class AccountabilityService implements AccountabilityDispatcher {
             try {
                 var history = repository.recentEntries(uid, 11).stream().filter(item -> !item.id().equals(entryId)).limit(10).toList();
                 var reflection = gemini.reflect(entry, history);
-                repository.completeEntryProcessing(uid, entryId, reflection.reply(), embeddings.embed(entry));
+                List<Double> vector;
+                try { vector = embeddings.embed(entry); }
+                catch (RuntimeException embeddingFailure) { log.warn("Embedding unavailable for entry {}; reflection will still be saved", entryId); vector = null; }
+                repository.completeEntryProcessing(uid, entryId, reflection.reply(), vector);
                 try {
                     List<String> goals = gemini.extractActionItems(entry);
                     repository.saveActionItems(uid, entryId, goals, createdAt);

@@ -28,6 +28,8 @@ public interface JournalRepository {
     default List<JournalEntry> listEntries(String uid) { return listEntries(uid, 100, null).items(); }
     default List<ActionItem> listActionItems(String uid) { return listActionItems(uid, 100, null).items(); }
     List<JournalEntry> findRelevant(String uid, List<Double> queryEmbedding, int limit);
+    /** Bounded lexical fallback used when the embedding provider is unavailable. */
+    List<JournalEntry> findTextRelevant(String uid, String query, int limit);
     void setActionItemStatus(String uid, String id, ActionItem.Status status);
     void deleteActionItem(String uid, String id);
     /** Permanently deletes every application record owned by the authenticated UID. */

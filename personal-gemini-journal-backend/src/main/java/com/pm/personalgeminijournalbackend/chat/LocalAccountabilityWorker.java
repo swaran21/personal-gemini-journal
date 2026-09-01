@@ -53,13 +53,17 @@ public class LocalAccountabilityWorker {
 
     void process(LocalAccountabilityOutboxRepository.Job job) {
         try {
-            String entry = outbox.entryContent(job);
+            LocalAccountabilityOutboxRepository.EntryPayload payload = outbox.entryContent(job);
+            String entry = payload.content();
             var history = journalRepository.recentEntries(job.uid(), 11).stream()
                     .filter(item -> !item.id().equals(job.entryId().toString()))
                     .limit(10)
                     .toList();
             var reflection = ai.reflect(entry, history);
-            journalRepository.completeEntryProcessing(job.uid(), job.entryId().toString(), reflection.reply(), embeddings.embed(entry));
+            List<Double> vector;
+            try { vector = embeddings.embed(payload.embeddingText()); }
+            catch (RuntimeException embeddingFailure) { log.warn("Embedding unavailable for job {}; reflection will still be saved", job.id()); vector = null; }
+            journalRepository.completeEntryProcessing(job.uid(), job.entryId().toString(), reflection.reply(), vector);
             try {
                 List<String> goals = ai.extractActionItems(entry);
                 journalRepository.saveActionItems(job.uid(), job.entryId().toString(), goals, Instant.now());

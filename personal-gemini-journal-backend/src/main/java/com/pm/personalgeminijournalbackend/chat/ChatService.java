@@ -29,7 +29,7 @@ public class ChatService {
         String entry = sanitize(rawEntry);
         Instant now = Instant.now();
         String id = journalRepository.createPendingEntry(uid, entry, location, now);
-        accountability.dispatch(uid, id, entry, now);
+        accountability.dispatch(uid, id, aiContext(entry, location), now);
         return new JournalEntryResponse(id, entry, null, null, now,
                 com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null, location);
     }
@@ -43,7 +43,10 @@ public class ChatService {
         var timeRange = temporalQueries.resolve(question, zone);
         var entries = timeRange
                 .map(range -> journalRepository.entriesBetween(uid, range.startInclusive(), range.endExclusive(), 100))
-                .orElseGet(() -> journalRepository.findRelevant(uid, embeddings.embed(question), 5));
+                .orElseGet(() -> {
+                    try { return journalRepository.findRelevant(uid, embeddings.embed(question), 5); }
+                    catch (RuntimeException embeddingFailure) { return journalRepository.findTextRelevant(uid, question, 5); }
+                });
         List<ChatTurn> conversation = request.history().stream()
                 .limit(10)
                 .map(message -> new ChatTurn(message.role() == RagChatRequest.Role.USER ? ChatTurn.Role.USER : ChatTurn.Role.ASSISTANT, sanitize(message.content())))
@@ -67,6 +70,11 @@ public class ChatService {
     private String excerpt(String text) {
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= 500 ? normalized : normalized.substring(0, 497) + "...";
+    }
+
+    private String aiContext(String entry, GeoLocation location) {
+        if (location == null || location.label() == null || location.label().isBlank()) return entry;
+        return entry + "\nLocation: " + location.label().trim();
     }
 
     private String sanitize(String value) {

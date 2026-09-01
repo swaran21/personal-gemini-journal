@@ -31,7 +31,7 @@ public class JdbcJournalRepository implements JournalRepository {
     @Override @Transactional public void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding) {
         scope(uid);
         int changed = jdbc.sql("UPDATE journal_entries SET ai_response=:reply,embedding=CAST(:embedding AS vector),processing_status='COMPLETED',processing_error=NULL,version=version+1 WHERE id=:id AND user_id=:uid")
-                .param("reply", reply).param("embedding", vector(embedding)).param("id", uuid(entryId)).param("uid", uid).update();
+                .param("reply", reply).param("embedding", embedding == null || embedding.isEmpty() ? null : vector(embedding)).param("id", uuid(entryId)).param("uid", uid).update();
         if (changed == 0) throw new NoSuchElementException("Journal entry not found");
     }
 
@@ -128,6 +128,12 @@ public class JdbcJournalRepository implements JournalRepository {
         return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid AND processing_status='COMPLETED' AND embedding IS NOT NULL ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT :limit")
                 .param("uid", uid).param("embedding", vector(queryEmbedding)).param("limit", Math.max(1, Math.min(limit, 10)))
                 .query((rs, row) -> entry(rs, List.of())).list();
+    }
+
+    @Override @Transactional(readOnly = true) public List<JournalEntry> findTextRelevant(String uid, String query, int limit) {
+        scope(uid);
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid AND to_tsvector('simple', coalesce(content,'') || ' ' || coalesce(location_label,'')) @@ plainto_tsquery('simple', :query) ORDER BY created_at DESC,id DESC LIMIT :limit")
+                .param("uid", uid).param("query", query).param("limit", Math.max(1, Math.min(limit, 10))).query((rs, row) -> entry(rs, List.of())).list();
     }
 
     @Override @Transactional public void setActionItemStatus(String uid, String id, ActionItem.Status status) {

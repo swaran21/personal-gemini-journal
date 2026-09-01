@@ -36,10 +36,14 @@ public class LocalAccountabilityOutboxRepository {
     }
 
     @Transactional(readOnly = true)
-    public String entryContent(Job job) {
+    public EntryPayload entryContent(Job job) {
         scope(job.uid());
-        return jdbc.sql("SELECT content FROM journal_entries WHERE id=:entryId AND user_id=:uid")
-                .param("entryId", job.entryId()).param("uid", job.uid()).query(String.class).single();
+        return jdbc.sql("SELECT content,location_label FROM journal_entries WHERE id=:entryId AND user_id=:uid")
+                .param("entryId", job.entryId()).param("uid", job.uid()).query((rs, row) -> {
+                    String content = rs.getString("content"); String label = rs.getString("location_label");
+                    String embeddingText = label == null || label.isBlank() ? content : content + "\nLocation: " + label;
+                    return new EntryPayload(content, embeddingText);
+                }).single();
     }
 
     @Transactional
@@ -66,4 +70,5 @@ public class LocalAccountabilityOutboxRepository {
     }
 
     public record Job(UUID id, String uid, UUID entryId, int attempt) { }
+    public record EntryPayload(String content, String embeddingText) { }
 }

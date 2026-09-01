@@ -35,7 +35,7 @@ class LocalAccountabilityWorkerTest {
     void savesGoalsIdempotentlyUnderTheClaimedOwnerAndCompletesJob() {
         var job = job(1);
         when(outbox.claimNext()).thenReturn(Optional.of(job), Optional.empty());
-        when(outbox.entryContent(job)).thenReturn("I will finish the portfolio");
+        when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("I will finish the portfolio", "I will finish the portfolio"));
         when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
         when(ai.reflect(any(), anyList())).thenReturn(new GeminiResult("You have a clear next step.", List.of()));
         when(embeddings.embed(any())).thenReturn(List.of(1d));
@@ -52,7 +52,7 @@ class LocalAccountabilityWorkerTest {
     @Test
     void returnsFailuresToTheOutboxRetryPolicy() {
         var job = job(2);
-        when(outbox.entryContent(job)).thenReturn("entry");
+        when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("entry", "entry"));
         when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
         when(ai.reflect(eq("entry"), anyList())).thenThrow(new IllegalStateException("model unavailable"));
 
@@ -67,7 +67,7 @@ class LocalAccountabilityWorkerTest {
     @Test
     void optionalGoalFailureDoesNotDiscardSuccessfulReflection() {
         var job = job(1);
-        when(outbox.entryContent(job)).thenReturn("entry");
+        when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("entry", "entry"));
         when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
         when(ai.reflect(eq("entry"), anyList())).thenReturn(new GeminiResult("reply", List.of()));
         when(embeddings.embed("entry")).thenReturn(List.of(1d));
@@ -78,6 +78,29 @@ class LocalAccountabilityWorkerTest {
         verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "reply", List.of(1d));
         verify(outbox).markSucceeded(job);
         verify(outbox, never()).markFailed(any(), any(), anyInt());
+    }
+
+    @Test
+    void embedsApprovedLocationLabelAlongsideEntryText() {
+        var job = job(1);
+        when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("coffee", "coffee\nLocation: Cubbon Park"));
+        when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
+        when(ai.reflect(eq("coffee"), anyList())).thenReturn(new GeminiResult("reply", List.of()));
+        when(embeddings.embed("coffee\nLocation: Cubbon Park")).thenReturn(List.of(1d));
+        worker.process(job);
+        verify(embeddings).embed("coffee\nLocation: Cubbon Park");
+    }
+
+    @Test
+    void embeddingQuotaFailureDoesNotLoseAiReflection() {
+        var job = job(1);
+        when(outbox.entryContent(job)).thenReturn(new LocalAccountabilityOutboxRepository.EntryPayload("entry", "entry\nLocation: Home"));
+        when(journals.recentEntries("uid-1", 11)).thenReturn(List.of());
+        when(ai.reflect(eq("entry"), anyList())).thenReturn(new GeminiResult("reply", List.of()));
+        when(embeddings.embed(anyString())).thenThrow(new IllegalStateException("quota"));
+        worker.process(job);
+        verify(journals).completeEntryProcessing("uid-1", job.entryId().toString(), "reply", null);
+        verify(outbox).markSucceeded(job);
     }
 
     private LocalAccountabilityOutboxRepository.Job job(int attempt) {
