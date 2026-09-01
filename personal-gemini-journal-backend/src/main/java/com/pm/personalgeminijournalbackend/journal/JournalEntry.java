@@ -8,6 +8,10 @@ public record JournalEntry(
         Instant createdAt,
         List<Double> embedding,
         ProcessingStatus processingStatus,
-        String processingError) {
+        String processingError,
+        GeoLocation location) {
+    public JournalEntry(String id, String text, String response, Instant createdAt, List<Double> embedding, ProcessingStatus processingStatus, String processingError) {
+        this(id, text, response, createdAt, embedding, processingStatus, processingError, null);
+    }
     public enum ProcessingStatus { PENDING, COMPLETED, FAILED }
 }

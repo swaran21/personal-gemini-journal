@@ -15,7 +15,18 @@ public class JournalEntryController {
     private final ChatService chatService;
     private final JournalRepository repository;
     public JournalEntryController(ChatService chatService, JournalRepository repository) { this.chatService = chatService; this.repository = repository; }
-    @PostMapping("/entry") public ResponseEntity<JournalEntryResponse> create(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody JournalEntryRequest request) { return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.processJournalEntry(principal.uid(), request.content())); }
-    @GetMapping("/entries") public List<JournalEntryResponse> entries(@AuthenticationPrincipal FirebasePrincipal principal) { return repository.listEntries(principal.uid()).stream().map(entry -> new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(), entry.processingStatus(), entry.processingError())).toList(); }
+    @PostMapping("/entry") public ResponseEntity<JournalEntryResponse> create(@AuthenticationPrincipal FirebasePrincipal principal, @Valid @RequestBody JournalEntryRequest request) {
+        GeoLocation location = request.location() == null ? null : request.location().toLocation();
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.processJournalEntry(principal.uid(), request.content(), location));
+    }
+    @GetMapping("/entries") public PageSlice<JournalEntryResponse> entries(
+            @AuthenticationPrincipal FirebasePrincipal principal,
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) String cursor) {
+        PageSlice<JournalEntry> page = repository.listEntries(principal.uid(), bounded(limit), cursor);
+        return new PageSlice<>(page.items().stream().map(this::response).toList(), page.nextCursor(), page.hasMore());
+    }
     @PostMapping("/entries/{id}/retry") public ResponseEntity<JournalEntryResponse> retry(@AuthenticationPrincipal FirebasePrincipal principal, @PathVariable String id) { return ResponseEntity.status(HttpStatus.ACCEPTED).body(chatService.retryJournalEntry(principal.uid(), id)); }
+    private int bounded(int limit) { if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100"); return limit; }
+    private JournalEntryResponse response(JournalEntry entry) { return new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(), entry.processingStatus(), entry.processingError(), entry.location()); }
 }

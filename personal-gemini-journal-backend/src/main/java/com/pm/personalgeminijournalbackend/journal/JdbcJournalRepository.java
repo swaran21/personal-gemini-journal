@@ -17,11 +17,12 @@ public class JdbcJournalRepository implements JournalRepository {
     private final JdbcClient jdbc;
     public JdbcJournalRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
-    @Override @Transactional public String createPendingEntry(String uid, String text, Instant now) {
+    @Override @Transactional public String createPendingEntry(String uid, String text, GeoLocation location, Instant now) {
         scope(uid);
         UUID id = UUID.randomUUID();
-        jdbc.sql("INSERT INTO journal_entries(id,user_id,content,processing_status,created_at) VALUES (:id,:uid,:content,'PENDING',:createdAt)")
-                .param("id", id).param("uid", uid).param("content", text).param("createdAt", Timestamp.from(now)).update();
+        jdbc.sql("INSERT INTO journal_entries(id,user_id,content,processing_status,created_at,latitude,longitude,location_label) VALUES (:id,:uid,:content,'PENDING',:createdAt,:latitude,:longitude,:label)")
+                .param("id", id).param("uid", uid).param("content", text).param("createdAt", Timestamp.from(now))
+                .param("latitude", location == null ? null : location.latitude()).param("longitude", location == null ? null : location.longitude()).param("label", location == null ? null : location.label()).update();
         jdbc.sql("INSERT INTO accountability_outbox(id,user_id,journal_entry_id,status,attempts,available_at,created_at) VALUES (:id,:uid,:entryId,'PENDING',0,:createdAt,:createdAt)")
                 .param("id", UUID.randomUUID()).param("uid", uid).param("entryId", id).param("createdAt", Timestamp.from(now)).update();
         return id.toString();
@@ -49,7 +50,7 @@ public class JdbcJournalRepository implements JournalRepository {
         if (changed == 0) throw new NoSuchElementException("Failed journal entry not found");
         jdbc.sql("UPDATE accountability_outbox SET status='PENDING',attempts=0,available_at=:availableAt,locked_at=NULL,last_error=NULL,completed_at=NULL WHERE journal_entry_id=:entryId AND user_id=:uid")
                 .param("availableAt", Timestamp.from(now)).param("entryId", id).param("uid", uid).update();
-        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error FROM journal_entries WHERE id=:id AND user_id=:uid")
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE id=:id AND user_id=:uid")
                 .param("id", id).param("uid", uid).query((rs, row) -> entry(rs, List.of())).single();
     }
 
@@ -67,21 +68,39 @@ public class JdbcJournalRepository implements JournalRepository {
 
     @Override @Transactional(readOnly = true) public List<JournalEntry> recentEntries(String uid, int maxResults) {
         scope(uid);
-        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error FROM journal_entries WHERE user_id=:uid ORDER BY created_at DESC LIMIT :limit")
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid ORDER BY created_at DESC,id DESC LIMIT :limit")
                 .param("uid", uid).param("limit", bounded(maxResults)).query((rs, row) -> entry(rs, List.of())).list();
     }
 
-    @Override @Transactional(readOnly = true) public List<JournalEntry> listEntries(String uid) { return recentEntries(uid, 100); }
-
-    @Override @Transactional(readOnly = true) public List<ActionItem> listActionItems(String uid) {
+    @Override @Transactional(readOnly = true) public List<JournalEntry> entriesBetween(String uid, Instant startInclusive, Instant endExclusive, int maxResults) {
         scope(uid);
-        return jdbc.sql("SELECT id,goal,status,created_at FROM action_items WHERE user_id=:uid ORDER BY created_at DESC LIMIT 100")
-                .param("uid", uid).query((rs, row) -> new ActionItem(rs.getObject("id", UUID.class).toString(), rs.getString("goal"), ActionItem.Status.valueOf(rs.getString("status")), rs.getTimestamp("created_at").toInstant())).list();
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid AND created_at>=:start AND created_at<:end ORDER BY created_at ASC,id ASC LIMIT :limit")
+                .param("uid", uid).param("start", Timestamp.from(startInclusive)).param("end", Timestamp.from(endExclusive)).param("limit", bounded(maxResults)).query((rs, row) -> entry(rs, List.of())).list();
+    }
+
+    @Override @Transactional(readOnly = true) public PageSlice<JournalEntry> listEntries(String uid, int limit, String cursor) {
+        scope(uid); int pageSize = bounded(limit); PageCursor.Decoded decoded = PageCursor.decode(cursor);
+        String condition = decoded == null ? "" : " AND (created_at,id)<(:cursorAt,:cursorId)";
+        var query = jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid" + condition + " ORDER BY created_at DESC,id DESC LIMIT :limit")
+                .param("uid", uid).param("limit", pageSize + 1);
+        if (decoded != null) query = query.param("cursorAt", Timestamp.from(decoded.createdAt())).param("cursorId", uuid(decoded.id()));
+        List<JournalEntry> rows = query.query((rs, row) -> entry(rs, List.of())).list();
+        return page(rows, pageSize);
+    }
+
+    @Override @Transactional(readOnly = true) public PageSlice<ActionItem> listActionItems(String uid, int limit, String cursor) {
+        scope(uid); int pageSize = bounded(limit); PageCursor.Decoded decoded = PageCursor.decode(cursor);
+        String condition = decoded == null ? "" : " AND (created_at,id)<(:cursorAt,:cursorId)";
+        var query = jdbc.sql("SELECT id,goal,status,created_at FROM action_items WHERE user_id=:uid" + condition + " ORDER BY created_at DESC,id DESC LIMIT :limit")
+                .param("uid", uid).param("limit", pageSize + 1);
+        if (decoded != null) query = query.param("cursorAt", Timestamp.from(decoded.createdAt())).param("cursorId", uuid(decoded.id()));
+        List<ActionItem> rows = query.query((rs, row) -> new ActionItem(rs.getObject("id", UUID.class).toString(), rs.getString("goal"), ActionItem.Status.valueOf(rs.getString("status")), rs.getTimestamp("created_at").toInstant())).list();
+        return page(rows, pageSize);
     }
 
     @Override @Transactional(readOnly = true) public List<JournalEntry> findRelevant(String uid, List<Double> queryEmbedding, int limit) {
         scope(uid);
-        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error FROM journal_entries WHERE user_id=:uid AND processing_status='COMPLETED' AND embedding IS NOT NULL ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT :limit")
+        return jdbc.sql("SELECT id,content,ai_response,created_at,processing_status,processing_error,latitude,longitude,location_label FROM journal_entries WHERE user_id=:uid AND processing_status='COMPLETED' AND embedding IS NOT NULL ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT :limit")
                 .param("uid", uid).param("embedding", vector(queryEmbedding)).param("limit", Math.max(1, Math.min(limit, 10)))
                 .query((rs, row) -> entry(rs, List.of())).list();
     }
@@ -114,6 +133,15 @@ public class JdbcJournalRepository implements JournalRepository {
         return new JournalEntry(
                 rs.getObject("id", UUID.class).toString(), rs.getString("content"), rs.getString("ai_response"),
                 rs.getTimestamp("created_at").toInstant(), embedding,
-                JournalEntry.ProcessingStatus.valueOf(rs.getString("processing_status")), rs.getString("processing_error"));
+                JournalEntry.ProcessingStatus.valueOf(rs.getString("processing_status")), rs.getString("processing_error"),
+                rs.getObject("latitude") == null ? null : new GeoLocation(rs.getDouble("latitude"), rs.getDouble("longitude"), rs.getString("location_label")));
+    }
+    private <T> PageSlice<T> page(List<T> rows, int limit) {
+        boolean hasMore = rows.size() > limit; List<T> items = hasMore ? rows.subList(0, limit) : rows;
+        if (items.isEmpty()) return new PageSlice<>(List.of(), null, false);
+        Object last = items.get(items.size() - 1);
+        Instant createdAt = last instanceof JournalEntry entry ? entry.createdAt() : ((ActionItem) last).createdAt();
+        String id = last instanceof JournalEntry entry ? entry.id() : ((ActionItem) last).id();
+        return new PageSlice<>(items, PageCursor.encode(createdAt, id), hasMore);
     }
 }

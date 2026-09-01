@@ -4,6 +4,7 @@ import com.pm.personalgeminijournalbackend.gemini.GenerativeAiService;
 import com.pm.personalgeminijournalbackend.gemini.EmbeddingService;
 import com.pm.personalgeminijournalbackend.journal.JournalRepository;
 import com.pm.personalgeminijournalbackend.journal.JournalEntryResponse;
+import com.pm.personalgeminijournalbackend.journal.GeoLocation;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
@@ -17,12 +18,15 @@ public class ChatService {
         return new ChatResponse(result.aiResponse(), result.extractedGoal());
     }
     public JournalEntryResponse processJournalEntry(String uid, String rawEntry) {
+        return processJournalEntry(uid, rawEntry, null);
+    }
+    public JournalEntryResponse processJournalEntry(String uid, String rawEntry, GeoLocation location) {
         String entry = sanitize(rawEntry);
         Instant now = Instant.now();
-        String id = journalRepository.createPendingEntry(uid, entry, now);
+        String id = journalRepository.createPendingEntry(uid, entry, location, now);
         accountability.dispatch(uid, id, entry, now);
         return new JournalEntryResponse(id, entry, null, null, now,
-                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null);
+                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null, location);
     }
     public RagChatResponse chatWithPastSelf(String uid, String rawQuestion) {
         String question = sanitize(rawQuestion);
@@ -36,7 +40,7 @@ public class ChatService {
         var entry = journalRepository.retryEntryProcessing(uid, entryId, Instant.now());
         accountability.dispatch(uid, entry.id(), entry.text(), entry.createdAt());
         return new JournalEntryResponse(entry.id(), entry.text(), entry.response(), null, entry.createdAt(),
-                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null);
+                com.pm.personalgeminijournalbackend.journal.JournalEntry.ProcessingStatus.PENDING, null, entry.location());
     }
 
     private String excerpt(String text) {

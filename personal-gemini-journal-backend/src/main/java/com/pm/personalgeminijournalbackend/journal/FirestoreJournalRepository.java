@@ -18,9 +18,10 @@ public class FirestoreJournalRepository implements JournalRepository {
     private com.google.cloud.firestore.CollectionReference entries(String uid) { return firestore.collection("users").document(uid).collection("journal_entries"); }
     private com.google.cloud.firestore.CollectionReference actionItems(String uid) { return firestore.collection("users").document(uid).collection("action_items"); }
 
-    @Override public String createPendingEntry(String uid, String text, Instant now) {
+    @Override public String createPendingEntry(String uid, String text, GeoLocation location, Instant now) {
         var ref = entries(uid).document();
         Map<String, Object> data = new HashMap<>(); data.put("text", text); data.put("response", null); data.put("embedding", List.of()); data.put("processingStatus", "PENDING"); data.put("processingError", null); data.put("createdAt", now.toEpochMilli());
+        if (location != null) data.put("location", Map.of("latitude", location.latitude(), "longitude", location.longitude(), "label", Objects.requireNonNullElse(location.label(), "")));
         wait(ref.set(data)); return ref.getId();
     }
     @Override public void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding) {
@@ -60,6 +61,14 @@ public class FirestoreJournalRepository implements JournalRepository {
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
+    @Override public List<JournalEntry> entriesBetween(String uid, Instant startInclusive, Instant endExclusive, int maxResults) {
+        try {
+            return entries(uid).whereGreaterThanOrEqualTo("createdAt", startInclusive.toEpochMilli())
+                    .whereLessThan("createdAt", endExclusive.toEpochMilli()).orderBy("createdAt", Query.Direction.ASCENDING)
+                    .limit(Math.max(1, Math.min(maxResults, 100))).get().get().getDocuments().stream().map(d -> entry(d, List.of())).toList();
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
+        catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
+    }
     private List<JournalEntry> entriesWithEmbeddings(String uid, int maxResults) {
         try {
             return entries(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(maxResults).get().get().getDocuments().stream().map(d ->
@@ -72,11 +81,26 @@ public class FirestoreJournalRepository implements JournalRepository {
                 .map(entry -> Map.entry(entry, cosine(queryEmbedding, entry.embedding()))).filter(entry -> entry.getValue() >= 0.55d)
                 .sorted(Map.Entry.<JournalEntry, Double>comparingByValue().reversed()).limit(Math.max(1, Math.min(limit, 10))).map(Map.Entry::getKey).toList();
     }
-    @Override public List<JournalEntry> listEntries(String uid) { return recentEntries(uid, 100); }
-    @Override public List<ActionItem> listActionItems(String uid) {
+    @Override public PageSlice<JournalEntry> listEntries(String uid, int limit, String cursor) {
+        int pageSize = Math.max(1, Math.min(limit, 100)); PageCursor.Decoded decoded = PageCursor.decode(cursor);
+        Query query = entries(uid).orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy(com.google.cloud.firestore.FieldPath.documentId(), Query.Direction.DESCENDING);
+        if (decoded != null) query = query.startAfter(decoded.createdAt().toEpochMilli(), validId(decoded.id()));
         try {
-            return actionItems(uid).orderBy("createdAt", Query.Direction.DESCENDING).limit(100).get().get().getDocuments().stream().map(d ->
+            List<JournalEntry> rows = query.limit(pageSize + 1).get().get().getDocuments().stream().map(d -> entry(d, List.of())).toList();
+            return entryPage(rows, pageSize);
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
+        catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
+    }
+    @Override public PageSlice<ActionItem> listActionItems(String uid, int limit, String cursor) {
+        int pageSize = Math.max(1, Math.min(limit, 100)); PageCursor.Decoded decoded = PageCursor.decode(cursor);
+        Query query = actionItems(uid).orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy(com.google.cloud.firestore.FieldPath.documentId(), Query.Direction.DESCENDING);
+        if (decoded != null) query = query.startAfter(decoded.createdAt().toEpochMilli(), validId(decoded.id()));
+        try {
+            List<ActionItem> rows = query.limit(pageSize + 1).get().get().getDocuments().stream().map(d ->
                     new ActionItem(d.getId(), d.getString("text"), actionStatus(d), Instant.ofEpochMilli(Objects.requireNonNullElse(d.getLong("createdAt"), 0L)))).toList();
+            return actionPage(rows, pageSize);
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException("Firestore operation interrupted", e); }
         catch (ExecutionException e) { throw new IllegalStateException("Firestore operation failed", e.getCause()); }
     }
@@ -98,7 +122,21 @@ public class FirestoreJournalRepository implements JournalRepository {
         String rawStatus = Objects.requireNonNullElse(document.getString("processingStatus"), "COMPLETED");
         return new JournalEntry(document.getId(), document.getString("text"), document.getString("response"),
                 Instant.ofEpochMilli(Objects.requireNonNullElse(document.getLong("createdAt"), 0L)), embedding,
-                JournalEntry.ProcessingStatus.valueOf(rawStatus), document.getString("processingError"));
+                JournalEntry.ProcessingStatus.valueOf(rawStatus), document.getString("processingError"), location(document.get("location")));
+    }
+    private GeoLocation location(Object value) {
+        if (!(value instanceof Map<?, ?> map) || !(map.get("latitude") instanceof Number latitude) || !(map.get("longitude") instanceof Number longitude)) return null;
+        return new GeoLocation(latitude.doubleValue(), longitude.doubleValue(), Objects.toString(map.get("label"), null));
+    }
+    private PageSlice<JournalEntry> entryPage(List<JournalEntry> rows, int limit) {
+        boolean more = rows.size() > limit; List<JournalEntry> items = more ? rows.subList(0, limit) : rows;
+        String next = items.isEmpty() ? null : PageCursor.encode(items.get(items.size() - 1).createdAt(), items.get(items.size() - 1).id());
+        return new PageSlice<>(items, next, more);
+    }
+    private PageSlice<ActionItem> actionPage(List<ActionItem> rows, int limit) {
+        boolean more = rows.size() > limit; List<ActionItem> items = more ? rows.subList(0, limit) : rows;
+        String next = items.isEmpty() ? null : PageCursor.encode(items.get(items.size() - 1).createdAt(), items.get(items.size() - 1).id());
+        return new PageSlice<>(items, next, more);
     }
     private double cosine(List<Double> left, List<Double> right) {
         if (left.isEmpty() || left.size() != right.size()) return -1d;
