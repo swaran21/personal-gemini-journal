@@ -8,6 +8,12 @@
   "resetPasswordAllowed": true,
   "bruteForceProtected": true,
   "passwordPolicy": "length(12) and digits(1) and lowerCase(1) and upperCase(1)",
+  "roles": {
+    "realm": [
+      { "name": "journal-user", "description": "Standard private journal user" },
+      { "name": "journal-admin", "description": "Administrative capability without cross-user journal access" }
+    ]
+  },
   "clients": [
     {
       "clientId": "journal-web",

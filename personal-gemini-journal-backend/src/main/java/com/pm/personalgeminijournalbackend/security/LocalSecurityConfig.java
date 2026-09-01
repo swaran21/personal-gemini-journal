@@ -20,7 +20,6 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 
-import java.util.List;
 
 @Configuration
 @Profile("local")
@@ -49,9 +48,10 @@ public class LocalSecurityConfig {
     }
 
     @Bean SecurityFilterChain localSecurityFilterChain(HttpSecurity http, UserRateLimitFilter rateLimitFilter) throws Exception {
-        Converter<Jwt, AbstractAuthenticationToken> converter = jwt -> new UsernamePasswordAuthenticationToken(new FirebasePrincipal(jwt.getSubject()), jwt, List.of());
+        Converter<Jwt, AbstractAuthenticationToken> converter = jwt -> new UsernamePasswordAuthenticationToken(
+                new FirebasePrincipal(jwt.getSubject()), jwt, RoleAuthorities.from(jwt.getClaim("realm_access"), jwt.getClaim("roles")));
         return http.csrf(csrf -> csrf.disable()).cors(cors -> {}).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health/**").permitAll().anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator/health/**").permitAll().requestMatchers("/api/admin/**").hasRole("ADMIN").requestMatchers("/api/**").hasRole("USER").anyRequest().authenticated())
                 .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
                 .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class).build();
     }

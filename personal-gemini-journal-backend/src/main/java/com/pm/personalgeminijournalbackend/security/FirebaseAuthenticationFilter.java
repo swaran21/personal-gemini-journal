@@ -16,7 +16,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
-import java.util.List;
 
 @Component
 @Profile("cloud")
@@ -34,7 +33,8 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(7).trim();
             if (token.isEmpty()) throw new IllegalArgumentException("blank token");
             FirebaseToken verified = firebaseAuth.verifyIdToken(token, true);
-            var auth = new UsernamePasswordAuthenticationToken(new FirebasePrincipal(verified.getUid()), null, List.of());
+            var auth = new UsernamePasswordAuthenticationToken(new FirebasePrincipal(verified.getUid()), null,
+                    RoleAuthorities.from(verified.getClaims().get("realm_access"), verified.getClaims().get("roles")));
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(auth);
             chain.doFilter(request, response);
