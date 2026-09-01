@@ -79,7 +79,7 @@ try {
     $firstToken = Get-UserToken "$firstUsername@local.test" $firstPassword
     $secondToken = Get-UserToken "$secondUsername@local.test" $secondPassword
 
-    $emptyEntries = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken) | Where-Object { $null -ne $_ })
+    $emptyEntries = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken).items | Where-Object { $null -ne $_ })
     if ($emptyEntries.Count -ne 0) { throw 'Disposable first user unexpectedly has journal data' }
 
     try {
@@ -91,16 +91,18 @@ try {
 
     $created = Invoke-Api 'Post' '/api/journal/entry' $firstToken @{
         content = 'Today I completed my architecture review. Tomorrow at 9 AM I will write the security test report.'
+        location = @{ latitude = 12.9716; longitude = 77.5946; label = 'Smoke test location' }
     }
     if (-not $created.id -or $created.processingStatus -ne 'PENDING') { throw 'Journal was not accepted for background processing' }
 
     $processed = $null
     for ($attempt = 0; $attempt -lt 30 -and $null -eq $processed; $attempt++) {
         Start-Sleep -Seconds 2
-        $processed = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken) | Where-Object { $_.id -eq $created.id -and $_.processingStatus -eq 'COMPLETED' }) | Select-Object -First 1
+        $processed = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken).items | Where-Object { $_.id -eq $created.id -and $_.processingStatus -eq 'COMPLETED' }) | Select-Object -First 1
     }
     if ($null -eq $processed -or -not $processed.aiResponse) { throw 'Background reflection did not complete within 60 seconds' }
-    $savedEntries = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken) | Where-Object { $null -ne $_ })
+    if (-not $processed.location -or $processed.location.label -ne 'Smoke test location') { throw 'Approved entry location was not preserved' }
+    $savedEntries = @((Invoke-Api 'Get' '/api/journal/entries' $firstToken).items | Where-Object { $null -ne $_ })
     if ($savedEntries.Count -ne 1 -or $savedEntries[0].id -ne $created.id) { throw 'Owner could not list the saved journal entry' }
 
     $rag = Invoke-Api 'Post' '/api/chat/rag' $firstToken @{ query = 'What did I complete today?' }
@@ -109,7 +111,7 @@ try {
     $items = @()
     for ($attempt = 0; $attempt -lt 30 -and $items.Count -eq 0; $attempt++) {
         Start-Sleep -Seconds 2
-        $items = @((Invoke-Api 'Get' '/api/action-items' $firstToken) | Where-Object { $null -ne $_ })
+        $items = @((Invoke-Api 'Get' '/api/action-items' $firstToken).items | Where-Object { $null -ne $_ })
     }
     if ($items.Count -eq 0) { throw 'Accountability outbox did not produce an action item within 60 seconds' }
 
@@ -117,11 +119,18 @@ try {
         Invoke-Api 'Patch' "/api/action-items/$($items[0].id)" $firstToken @{ status = 'PENDING' } | Out-Null
     }
     Invoke-Api 'Patch' "/api/action-items/$($items[0].id)" $firstToken @{ status = 'COMPLETED' } | Out-Null
-    $reloadedItems = @((Invoke-Api 'Get' '/api/action-items' $firstToken) | Where-Object { $null -ne $_ })
+    $reloadedItems = @((Invoke-Api 'Get' '/api/action-items' $firstToken).items | Where-Object { $null -ne $_ })
     $completed = $reloadedItems | Where-Object { $_.id -eq $items[0].id } | Select-Object -First 1
     if (-not $completed -or $completed.status -ne 'COMPLETED') { throw 'Action item status did not update' }
 
-    $secondEntries = @((Invoke-Api 'Get' '/api/journal/entries' $secondToken) | Where-Object { $null -ne $_ })
+    $weekly = Invoke-Api 'Post' '/api/reflections/weekly' $firstToken @{ timeZone = 'UTC' }
+    if ($weekly.entryCount -lt 1 -or -not $weekly.suggestedFocus) { throw 'Weekly reflection was not grounded in the saved entry' }
+
+    $takeout = Invoke-Api 'Get' '/api/user/export?format=json' $firstToken
+    if (@($takeout.journalEntries).Count -ne 1 -or @($takeout.actionItems).Count -lt 1) { throw 'Data takeout did not include owned records' }
+    if ($takeout.journalEntries[0].embedding) { throw 'Data takeout exposed an internal embedding' }
+
+    $secondEntries = @((Invoke-Api 'Get' '/api/journal/entries' $secondToken).items | Where-Object { $null -ne $_ })
     if ($secondEntries.Count -ne 0) { throw 'Cross-user journal data was exposed' }
     try {
         Invoke-Api 'Patch' "/api/action-items/$($items[0].id)" $secondToken @{ status = 'PENDING' } | Out-Null
@@ -135,6 +144,9 @@ try {
         JournalCreated = $created.id
         RagReferences = @($rag.referencedEntries | Where-Object { $null -ne $_ }).Count
         ActionItems = $items.Count
+        WeeklyReflection = 'PASS'
+        DataTakeout = 'PASS'
+        Location = 'PASS'
         CrossUserIsolation = 'PASS'
     }
 } finally {

@@ -11,9 +11,9 @@ import static org.mockito.Mockito.*;
 class ChatServiceTest {
  @Test void scopesHistoryAndSavesResultUnderAuthenticatedUid() {
   GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
-  when(repo.createPendingEntry(eq("uid-1"), eq("Plan my run"), any())).thenReturn("entry-id");
+  when(repo.createPendingEntry(eq("uid-1"), eq("Plan my run"), isNull(), any())).thenReturn("entry-id");
   ChatResponse result = new ChatService(gemini, embeddings, repo, accountability).process("uid-1", " Plan my run ");
-  assertNull(result.extractedGoal()); verify(repo).createPendingEntry(eq("uid-1"), eq("Plan my run"), any()); verify(accountability).dispatch(eq("uid-1"), eq("entry-id"), eq("Plan my run"), any()); verifyNoInteractions(gemini, embeddings);
+  assertNull(result.extractedGoal()); verify(repo).createPendingEntry(eq("uid-1"), eq("Plan my run"), isNull(), any()); verify(accountability).dispatch(eq("uid-1"), eq("entry-id"), eq("Plan my run"), any()); verifyNoInteractions(gemini, embeddings);
  }
 
  @Test void rejectsBlankOrControlOnlyEntriesBeforeCallingDependencies() {
@@ -25,9 +25,17 @@ class ChatServiceTest {
 
  @Test void removesNullCharactersAndReturnsSavedEntryContract() {
   GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
-  when(repo.createPendingEntry(eq("uid-1"), eq("Plan run"), any())).thenReturn("entry-id");
+  when(repo.createPendingEntry(eq("uid-1"), eq("Plan run"), isNull(), any())).thenReturn("entry-id");
   var response = new ChatService(gemini, embeddings, repo, accountability).processJournalEntry("uid-1", " Plan\u0000 run ");
   assertEquals("entry-id", response.id()); assertEquals("Plan run", response.content()); assertNull(response.aiResponse()); assertEquals(JournalEntry.ProcessingStatus.PENDING, response.processingStatus());
+ }
+
+ @Test void persistsOnlyExplicitlyProvidedValidatedLocation() {
+  GenerativeAiService gemini = mock(GenerativeAiService.class); EmbeddingService embeddings = mock(EmbeddingService.class); JournalRepository repo = mock(JournalRepository.class); AccountabilityDispatcher accountability = mock(AccountabilityDispatcher.class);
+  var location = new com.pm.personalgeminijournalbackend.journal.GeoLocation(12.9716, 77.5946, "Campus");
+  when(repo.createPendingEntry(eq("uid-1"), eq("Studied today"), eq(location), any())).thenReturn("entry-id");
+  var response = new ChatService(gemini, embeddings, repo, accountability).processJournalEntry("uid-1", "Studied today", location);
+  assertEquals(location, response.location()); verify(repo).createPendingEntry(eq("uid-1"), eq("Studied today"), eq(location), any());
  }
 
  @Test void ragRetrievalIsScopedToAuthenticatedUser() {

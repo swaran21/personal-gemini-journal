@@ -103,6 +103,25 @@ class JdbcJournalRepositoryIntegrationTest {
         assertEquals(List.of("keep me"), inTransaction(() -> repository.listEntries(retainedOwner)).stream().map(JournalEntry::text).toList());
     }
 
+    @Test
+    void cursorPaginationIsStableUidScopedAndPreservesLocation() {
+        String owner = "page-owner-" + UUID.randomUUID();
+        String other = "page-other-" + UUID.randomUUID();
+        GeoLocation location = new GeoLocation(12.9716, 77.5946, "Library");
+        Instant firstTime = Instant.parse("2026-08-01T00:00:00Z");
+        inTransaction(() -> repository.createPendingEntry(owner, "older", location, firstTime));
+        inTransaction(() -> repository.createPendingEntry(owner, "newer", null, firstTime.plusSeconds(60)));
+        inTransaction(() -> repository.createPendingEntry(other, "must not leak", null, firstTime.plusSeconds(120)));
+
+        PageSlice<JournalEntry> first = inTransaction(() -> repository.listEntries(owner, 1, null));
+        PageSlice<JournalEntry> second = inTransaction(() -> repository.listEntries(owner, 1, first.nextCursor()));
+
+        assertEquals(List.of("newer"), first.items().stream().map(JournalEntry::text).toList());
+        assertTrue(first.hasMore()); assertNotNull(first.nextCursor());
+        assertEquals(List.of("older"), second.items().stream().map(JournalEntry::text).toList());
+        assertEquals(location, second.items().get(0).location()); assertFalse(second.hasMore());
+    }
+
     private static List<Double> embedding(double value) {
         return Collections.nCopies(768, value);
     }

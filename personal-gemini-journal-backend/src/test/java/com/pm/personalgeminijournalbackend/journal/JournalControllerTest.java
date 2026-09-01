@@ -17,30 +17,48 @@ class JournalControllerTest {
         JournalEntryController controller = new JournalEntryController(chatService, repository);
         FirebasePrincipal principal = new FirebasePrincipal("uid-1");
         JournalEntryResponse created = new JournalEntryResponse("id", "text", null, null, Instant.EPOCH, JournalEntry.ProcessingStatus.PENDING, null);
-        when(chatService.processJournalEntry("uid-1", "text")).thenReturn(created);
-        when(repository.listEntries("uid-1")).thenReturn(List.of(new JournalEntry("id", "text", "reply", Instant.EPOCH, List.of(1d), JournalEntry.ProcessingStatus.COMPLETED, null)));
+        when(chatService.processJournalEntry("uid-1", "text", null)).thenReturn(created);
+        when(repository.listEntries("uid-1", 20, null)).thenReturn(new PageSlice<>(List.of(new JournalEntry("id", "text", "reply", Instant.EPOCH, List.of(1d), JournalEntry.ProcessingStatus.COMPLETED, null)), null, false));
 
-        var createResponse = controller.create(principal, new JournalEntryRequest("text"));
+        var createResponse = controller.create(principal, new JournalEntryRequest("text", null));
         assertEquals(created, createResponse.getBody());
         assertEquals(202, createResponse.getStatusCode().value());
-        List<JournalEntryResponse> entries = controller.entries(principal);
+        PageSlice<JournalEntryResponse> entries = controller.entries(principal, 20, null);
 
-        assertEquals("text", entries.get(0).content());
-        assertEquals("reply", entries.get(0).aiResponse());
-        assertNull(entries.get(0).extractedGoal());
-        verify(chatService).processJournalEntry("uid-1", "text");
-        verify(repository).listEntries("uid-1");
+        assertEquals("text", entries.items().get(0).content());
+        assertEquals("reply", entries.items().get(0).aiResponse());
+        assertNull(entries.items().get(0).extractedGoal());
+        verify(chatService).processJournalEntry("uid-1", "text", null);
+        verify(repository).listEntries("uid-1", 20, null);
     }
 
     @Test void actionControllerMapsStorageShapeAndStatus() {
         JournalRepository repository = mock(JournalRepository.class);
         JournalController controller = new JournalController(repository);
-        when(repository.listActionItems("uid-1")).thenReturn(List.of(new ActionItem("id", "Write tests", ActionItem.Status.PROPOSED, Instant.EPOCH), new ActionItem("done", "Deploy", ActionItem.Status.COMPLETED, Instant.EPOCH)));
+        when(repository.listActionItems("uid-1", 50, null)).thenReturn(new PageSlice<>(List.of(new ActionItem("id", "Write tests", ActionItem.Status.PROPOSED, Instant.EPOCH), new ActionItem("done", "Deploy", ActionItem.Status.COMPLETED, Instant.EPOCH)), null, false));
 
-        List<ActionItemResponse> results = controller.actionItems(new FirebasePrincipal("uid-1"));
+        PageSlice<ActionItemResponse> results = controller.actionItems(new FirebasePrincipal("uid-1"), 50, null);
 
-        assertEquals(List.of("PROPOSED", "COMPLETED"), results.stream().map(ActionItemResponse::status).toList());
-        assertEquals(List.of("Write tests", "Deploy"), results.stream().map(ActionItemResponse::goal).toList());
+        assertEquals(List.of("PROPOSED", "COMPLETED"), results.items().stream().map(ActionItemResponse::status).toList());
+        assertEquals(List.of("Write tests", "Deploy"), results.items().stream().map(ActionItemResponse::goal).toList());
+    }
+
+    @Test void entryControllerAcceptsLocationButNeverAcceptsUid() {
+        ChatService service = mock(ChatService.class); JournalRepository repository = mock(JournalRepository.class);
+        JournalEntryController controller = new JournalEntryController(service, repository);
+        GeoLocation location = new GeoLocation(12.9, 77.6, "Library");
+        JournalEntryResponse response = new JournalEntryResponse("id", "text", null, null, Instant.EPOCH, JournalEntry.ProcessingStatus.PENDING, null, location);
+        when(service.processJournalEntry("owner", "text", location)).thenReturn(response);
+        assertEquals(location, controller.create(new FirebasePrincipal("owner"), new JournalEntryRequest("text", new JournalEntryRequest.LocationRequest(12.9, 77.6, "Library"))).getBody().location());
+        verify(service, never()).processJournalEntry(eq("other-user"), anyString(), any());
+    }
+
+    @Test void paginationLimitsAreValidated() {
+        JournalEntryController entries = new JournalEntryController(mock(ChatService.class), mock(JournalRepository.class));
+        JournalController actions = new JournalController(mock(JournalRepository.class));
+        FirebasePrincipal principal = new FirebasePrincipal("uid");
+        assertThrows(IllegalArgumentException.class, () -> entries.entries(principal, 0, null));
+        assertThrows(IllegalArgumentException.class, () -> actions.actionItems(principal, 101, null));
     }
 
     @Test void actionControllerChangesOnlyCurrentUsersItem() {

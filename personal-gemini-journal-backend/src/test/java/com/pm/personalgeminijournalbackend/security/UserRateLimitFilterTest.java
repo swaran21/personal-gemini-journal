@@ -41,6 +41,12 @@ class UserRateLimitFilterTest {
         assertEquals(200, invoke("POST", "/api/chat/rag").status());
     }
 
+    @Test void weeklyReflectionSharesTheCostSensitiveAiQuota() throws Exception {
+        authenticate("user-a");
+        assertEquals(200, invoke("POST", "/api/reflections/weekly").status());
+        assertEquals(429, invoke("POST", "/api/reflections/weekly").status());
+    }
+
     @Test void doesNotRateLimitBeforeAuthenticationOrOutsideApi() throws Exception {
         assertEquals(200, invoke("POST", "/api/journal/entry").status());
         authenticate("user-a");
