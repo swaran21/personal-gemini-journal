@@ -5,6 +5,7 @@ import com.pm.personalgeminijournalbackend.config.ApplicationConfig;
 import com.pm.personalgeminijournalbackend.config.GeminiApiKeyProvider;
 import com.pm.personalgeminijournalbackend.chat.ChatTurn;
 import com.pm.personalgeminijournalbackend.journal.JournalEntry;
+import com.pm.personalgeminijournalbackend.reflection.WeeklyReflection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -60,6 +61,20 @@ class GeminiServiceTest {
                 .andRespond(withSuccess("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"You built the RAG application.\"}]}}]}", MediaType.APPLICATION_JSON));
 
         assertEquals("You built the RAG application.", service.answerWithGrounding(context));
+        server.verify();
+    }
+
+    @Test void weeklyReflectionRequiresEvidenceBasedSpecificOutput() {
+        JournalEntry entry = new JournalEntry("id", "I built a RAG application", "Great progress",
+                Instant.parse("2026-09-01T10:00:00Z"), List.of(), JournalEntry.ProcessingStatus.COMPLETED, null);
+        server.expect(once(), requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"))
+                .andExpect(content().string(allOf(containsString("1-5 concrete highlights"), containsString("never a generic instruction"), containsString("I built a RAG application"))))
+                .andRespond(withSuccess("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{\\\"highlights\\\":[\\\"You built a RAG application.\\\"],\\\"accomplishments\\\":[\\\"Completed a RAG build.\\\"],\\\"unresolvedThemes\\\":[],\\\"suggestedFocus\\\":\\\"Document the RAG architecture.\\\"}\"}]}}]}", MediaType.APPLICATION_JSON));
+
+        WeeklyReflection result = service.generateWeeklyReflection(List.of(entry));
+
+        assertEquals(List.of("You built a RAG application."), result.highlights());
+        assertEquals("Document the RAG architecture.", result.suggestedFocus());
         server.verify();
     }
 }
