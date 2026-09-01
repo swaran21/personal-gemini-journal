@@ -25,8 +25,10 @@ public class FirestoreJournalRepository implements JournalRepository {
         wait(ref.set(data)); return ref.getId();
     }
     @Override public void completeEntryProcessing(String uid, String entryId, String reply, List<Double> embedding) {
-        wait(entries(uid).document(validId(entryId)).update(Map.of(
-                "response", reply, "embedding", embedding, "processingStatus", "COMPLETED", "processingError", com.google.cloud.firestore.FieldValue.delete())));
+        Map<String, Object> update = new HashMap<>();
+        update.put("response", reply); update.put("embedding", embedding == null ? List.of() : embedding);
+        update.put("processingStatus", "COMPLETED"); update.put("processingError", com.google.cloud.firestore.FieldValue.delete());
+        wait(entries(uid).document(validId(entryId)).update(update));
     }
     @Override public void failEntryProcessing(String uid, String entryId, String safeError) {
         wait(entries(uid).document(validId(entryId)).update(Map.of("processingStatus", "FAILED", "processingError", safeError)));
