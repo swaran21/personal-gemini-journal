@@ -80,7 +80,7 @@ Loads one selected local-calendar month from `/api/journal/calendar`. Colored da
 
 ### Roles and retrieval transparency
 
-The app loads `/api/user/me` after sign-in and displays the effective role. Every verified identity has `USER`; an identity-provider `journal-admin`/`admin` claim adds `ADMIN`. Admin status does not permit cross-user journal access. Past Self answers display `TEMPORAL SQL`, `LOCATION HYBRID`, `SEMANTIC HYBRID`, or `LEXICAL SQL FALLBACK` from the backend response.
+The app loads `/api/user/me` after sign-in and displays the effective role. Every verified identity has `USER`; an identity-provider `journal-admin`/`admin` claim adds `ADMIN`. An administrator sees an **Admin Controls** tab with privacy-preserving security-control status only—never other users' content, locations, exports, usage data, or actions. Backend authorization, not tab visibility, protects `/api/admin/**`. Past Self answers display `TEMPORAL SQL`, `LOCATION HYBRID`, `SEMANTIC HYBRID`, or `LEXICAL SQL FALLBACK` from the backend response.
 
 ### Privacy and deletion
 

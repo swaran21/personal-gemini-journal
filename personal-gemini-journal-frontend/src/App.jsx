@@ -11,6 +11,7 @@ import { RagView } from './components/rag/RagView';
 import { AccountabilityView } from './components/accountability/AccountabilityView';
 import { WeeklyReflectionView } from './components/reflection/WeeklyReflectionView';
 import { CalendarView } from './components/calendar/CalendarView';
+import { AdminDashboardView } from './components/admin/AdminDashboardView';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -77,13 +78,14 @@ export default function App() {
   return <div className="google-page-bg min-h-screen text-slate-800 selection:bg-[#D2E3FC]">
     <Header user={user} identity={identity} setError={setError} />
     <main className="mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
-      <ViewTabs view={view} setView={setView} />
+      <ViewTabs view={view} setView={setView} isAdmin={identity.roles?.includes('ADMIN')} />
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
       {view === 'journal' && <JournalView entries={entries} setEntries={setEntries} items={actionItems} setItems={setActionItems} refreshEntries={refreshEntries} refreshItems={refreshActionItems} loading={loading} setError={setError} hasMore={entryPage.hasMore} loadMore={async () => { try { const page = await api(`/api/journal/entries?limit=20&cursor=${encodeURIComponent(entryPage.nextCursor)}`); setEntries((current) => [...current, ...page.items]); setEntryPage(page); } catch (requestError) { setError(requestError.message); } }} />}
       {view === 'rag' && <RagView messages={ragMessages} setMessages={setRagMessages} setError={setError} />}
       {view === 'goals' && <AccountabilityView items={actionItems} setItems={setActionItems} loading={loading} setError={setError} hasMore={actionPage.hasMore} loadMore={async () => { try { const page = await api(`/api/action-items?limit=50&cursor=${encodeURIComponent(actionPage.nextCursor)}`); setActionItems((current) => [...current, ...page.items]); setActionPage(page); } catch (requestError) { setError(requestError.message); } }} />}
       {view === 'weekly' && <WeeklyReflectionView setError={setError} />}
       {view === 'calendar' && <CalendarView setError={setError} />}
+      {view === 'admin' && identity.roles?.includes('ADMIN') && <AdminDashboardView setError={setError} />}
     </main>
   </div>;
 }

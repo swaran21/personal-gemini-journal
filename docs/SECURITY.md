@@ -27,6 +27,7 @@ The browser is untrusted. Request JSON, path variables, bearer tokens, historica
 - Signed Keycloak realm roles and verified Firebase custom claims are allowlist-mapped to `ROLE_USER`/`ROLE_ADMIN`; client-supplied role headers or JSON are never trusted.
 - Every verified identity receives `ROLE_USER`. Only `journal-admin`/`admin` claims add `ROLE_ADMIN`, and `/api/admin/**` is separately authorized.
 - Administrative authority never bypasses UID predicates, RLS, or Firestore paths and therefore grants no cross-user journal visibility.
+- The admin dashboard is deliberately privacy-preserving: it reports only static control status and contains no user counts, journal content, locations, embeddings, exports, or cross-user actions.
 
 ### IDOR and tenant isolation
 
