@@ -16,7 +16,7 @@ import com.pm.personalgeminijournalbackend.reflection.WeeklyReflection;
 import java.time.Instant;
 
 @Service
-@Profile("local")
+@Profile("local & !gemini")
 public class OllamaAiService implements GenerativeAiService, EmbeddingService {
     private final RestClient client;
     private final ApplicationConfig.OllamaProperties properties;

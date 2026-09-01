@@ -8,10 +8,10 @@ import org.springframework.context.annotation.Profile;
 /** Obtains the Gemini credential from Google Secret Manager once per instance; never logs it. */
 @Component
 @Profile("cloud")
-public class GeminiSecretProvider {
+public class GeminiSecretProvider implements GeminiApiKeyProvider {
     private final SecretManagerServiceClient client; private final ApplicationConfig.GeminiProperties properties; private volatile String key;
     public GeminiSecretProvider(SecretManagerServiceClient client, ApplicationConfig.GeminiProperties properties) { this.client = client; this.properties = properties; }
-    public String apiKey() {
+    @Override public String apiKey() {
         String result = key;
         if (result != null) return result;
         synchronized (this) {

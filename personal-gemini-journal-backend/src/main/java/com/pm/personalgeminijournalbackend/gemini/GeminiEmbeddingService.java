@@ -2,7 +2,7 @@ package com.pm.personalgeminijournalbackend.gemini;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.pm.personalgeminijournalbackend.config.ApplicationConfig;
-import com.pm.personalgeminijournalbackend.config.GeminiSecretProvider;
+import com.pm.personalgeminijournalbackend.config.GeminiApiKeyProvider;
 import com.pm.personalgeminijournalbackend.journal.JournalEntry;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /** Generates Gemini embeddings and performs bounded in-memory similarity ranking for one user's entries. */
 @Service
@@ -20,10 +21,10 @@ import java.util.Map;
 public class GeminiEmbeddingService implements EmbeddingService {
     private static final int MAX_CANDIDATES = 100;
     private final RestClient client;
-    private final GeminiSecretProvider secrets;
+    private final GeminiApiKeyProvider secrets;
     private final ApplicationConfig.GeminiProperties properties;
 
-    public GeminiEmbeddingService(RestClient client, GeminiSecretProvider secrets, ApplicationConfig.GeminiProperties properties) {
+    public GeminiEmbeddingService(@Qualifier("geminiRestClient") RestClient client, GeminiApiKeyProvider secrets, ApplicationConfig.GeminiProperties properties) {
         this.client = client; this.secrets = secrets; this.properties = properties;
     }
 

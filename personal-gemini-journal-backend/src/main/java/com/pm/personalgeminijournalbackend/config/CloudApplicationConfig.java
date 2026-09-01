@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.client.RestClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.io.IOException;
 
@@ -34,5 +35,5 @@ public class CloudApplicationConfig {
     }
 
     @Bean SecretManagerServiceClient secretManagerServiceClient() throws IOException { return SecretManagerServiceClient.create(); }
-    @Bean RestClient geminiRestClient(RestClient.Builder builder) { return builder.baseUrl("https://generativelanguage.googleapis.com").build(); }
+    @Bean @Qualifier("geminiRestClient") RestClient geminiRestClient(RestClient.Builder builder) { return builder.baseUrl("https://generativelanguage.googleapis.com").build(); }
 }
