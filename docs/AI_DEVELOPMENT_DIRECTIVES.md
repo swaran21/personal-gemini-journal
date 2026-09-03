@@ -1,6 +1,6 @@
 # AI development directives
 
-These instructions are intended for Google AI Studio, Codex, Antigravity, and other coding models modifying this repository. The discoverable skill is [.agents/skills/personal-gemini-journal/SKILL.md](../.agents/skills/personal-gemini-journal/SKILL.md).
+These instructions are intended for Google AI Studio, Antigravity, and other approved coding assistants modifying this repository. The discoverable skill is [.agents/skills/personal-gemini-journal/SKILL.md](../.agents/skills/personal-gemini-journal/SKILL.md).
 
 ## Core security directive
 
